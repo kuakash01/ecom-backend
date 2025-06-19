@@ -2,13 +2,10 @@ require("dotenv").config();
 const mongoose = require('mongoose');
 
 
-const DB_URL = process.env.MONGO_URI+"/"+process.env.DB_NAME; // Replace with your MongoDB connection string
-
-
 module.exports = async() => {
     try {
     
-        const db_connection =  await mongoose.connect(`${DB_URL}`);
+        const db_connection =  await mongoose.connect(`${process.env.MONGO_URI}`);
         console.log('MongoDB connected successfully');
         return db_connection;
         
