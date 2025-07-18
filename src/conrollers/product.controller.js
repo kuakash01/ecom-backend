@@ -64,7 +64,7 @@ const addProduct = async (req, res) => {
 
     res.status(200).json({
       message: 'Upload successful',
-      newProduct,
+      data: newProduct,
     });
   } catch (err) {
     console.error(err);
