@@ -10,6 +10,10 @@ const { addProduct, getAllProducts} = require('../conrollers/product.controller'
 router.post('/add', upload.single('productImage'), addProduct);
 router.get('/all-products', getAllProducts);
 
+router.post("/test", (req, res) => {
+    res.status(200).json({ "response": "ok", "data": req.body || "no data" });
+});
+
 
 
 
