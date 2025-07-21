@@ -5,6 +5,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const app = express();
 const path = require('path'); 
+const cookieParser = require('cookie-parser');
+
 
 
 // database connection
@@ -17,11 +19,15 @@ const HOSTNAME = process.env.HOSTNAME || 'localhost';
 //middleware
 app.use(express.urlencoded({ extended: true })); // middleware for parsing form data
 app.use(express.json()); // middleware for parsing JSON data
-app.use(cors()); // middleware for enabling CORS
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000', // Adjust as needed
+    credentials: true, // Allow cookies to be sent with requests
+})); // middleware for enabling CORS
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use(cookieParser()); // middleware for parsing cookies
 
 
-
+// routes
 app.use("/api/auth", require("./routes/auth.routes"))
 app.use("/api/products", require("./routes/products.routes"))
 

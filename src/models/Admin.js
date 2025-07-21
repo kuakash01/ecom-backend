@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs");
 const adminSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true }, // hashed password
-  tokens: [{ type: String }] // for JWT or session management
+  tokens: {type: Array} // for JWT or session management
 });
 
 adminSchema.methods.comparePassword = function (password) {
