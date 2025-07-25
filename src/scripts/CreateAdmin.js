@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const Admin = require("../models/Admin");
 
-mongoose.connect("mongodb://localhost:27017/ecom");
+mongoose.connect("mongodb+srv://kuakash04:itsmeakash@cluster0.44juevl.mongodb.net/ecom?retryWrites=true&w=majority&appName=Cluster0");
 
 async function createAdmin() {
   const existing = await Admin.findOne({ email: "admin@gmail.com" });

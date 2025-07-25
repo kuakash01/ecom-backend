@@ -40,11 +40,20 @@ const signin = async (req, res) => {
 const signup = (req, res) => {
     res.status(200).json({ "response": "ok", "type": "signup" });
 }
+const signout = (req, res) => {
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/', // Important: must match the path used when setting the cookie
+    });
+    res.status(200).json({ "response": "ok", "type": "signout" });
+}
 
 const checkAuth = (req, res) => {
     res.status(200).json({
         message: "Authenticated",
         user: req.user.email // This will contain the decoded JWT payload
     });
-}   
-module.exports = { signin, signup, checkAuth }
+}
+module.exports = { signin, signup, checkAuth, signout }
