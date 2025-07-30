@@ -29,7 +29,7 @@ const addProduct = async (req, res) => {
   }
   try {
     const { productName, price, description, category, quantity, size } = req.body;
-    console.log("request body",req.body);
+    console.log("request body", req.body);
     const file = req.file;
     const result = await uploadToCloudinary(file.buffer, 'my-uploads');
     // Store this path or filename in your DB
@@ -69,5 +69,33 @@ const getAllProducts = async (req, res) => {
   }
 }
 
+const deleteProduct = async (req, res) => {
+  const { id } = req.body;
+  try {
+    if (!id)
+      res.status(400).json({ error: "Product Id is required" })
 
-module.exports = { addProduct, getAllProducts }
+      // Find the product first 
+    const product = await Product.findById(id)
+    if (!product)
+      return res.status(404).json({ error: "Product not found" });
+
+    
+    // Optional: Delete image from Cloudinary
+    if (product.image && product.image.public_id) {
+      await cloudinary.uploader.destroy(product.image.public_id);
+    }
+
+    // Delete the product from the database
+    await Product.deleteOne({ _id: id });
+
+    res.status(200).json({ message: "Product deleted successfully" });
+
+  } catch (error) {
+    console.error("Delete error:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+
+module.exports = { addProduct, getAllProducts, deleteProduct }

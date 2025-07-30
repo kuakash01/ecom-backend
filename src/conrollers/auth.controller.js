@@ -51,6 +51,25 @@ const signout = (req, res) => {
 }
 
 const checkAuth = (req, res) => {
+
+    
+    // const { email} = req.user;
+    // try {
+    //     const FindAdmin = await Admin.findOne({ email });
+    //     if (!FindAdmin) return res.status(404).json({ error: "Admin not found" });
+    //     const isMatch = await FindAdmin.comparePassword(password);
+    //     if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
+
+    //     res.status(200).json({
+    //         message: "Authenticated",
+    //         user: req.user.email // This will contain the decoded JWT payload
+    //     });
+
+    // } catch (error){
+    //     res.status(500).message("error in user authnetication")
+    // }
+
+    // console.log("auth chek",new Date(), req.user.email)
     res.status(200).json({
         message: "Authenticated",
         user: req.user.email // This will contain the decoded JWT payload
