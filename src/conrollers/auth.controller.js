@@ -1,4 +1,4 @@
-const Admin = require("../models/Admin");
+const User = require("../models/user.model");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -6,19 +6,19 @@ const jwt = require("jsonwebtoken");
 const signin = async (req, res) => {
     const { email, password } = req.body;
     try {
-        const FindAdmin = await Admin.findOne({ email });
-        if (!FindAdmin) return res.status(404).json({ error: "Admin not found" });
-        const isMatch = await FindAdmin.comparePassword(password);
+        const FindUser = await User.findOne({ email });
+        if (!FindUser) return res.status(404).json({ error: "User not found" });
+        const isMatch = await FindUser.comparePassword(password);
         if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
         // Generate JWT or session token here
         const token = jwt.sign(
-            { id: FindAdmin._id, email: FindAdmin.email },
+            { id: FindUser._id, role: FindUser.role, email: FindUser.email },
             process.env.JWT_SECRET,
             { expiresIn: '1d' }
         );
-        FindAdmin.tokens.push({ token });
-        await FindAdmin.save();
+        FindUser.tokens.push({ token });
+        await FindUser.save();
 
         res.cookie('token', token, {
             httpOnly: true,
@@ -30,49 +30,70 @@ const signin = async (req, res) => {
 
         res.status(200).json({
             message: "Login successful",
-            user: FindAdmin.email,
+            user: FindUser.email,
         });
     } catch (error) {
         return res.status(500).json({ error: error.message });
 
     }
 }
-const signup = (req, res) => {
-    res.status(200).json({ "response": "ok", "type": "signup" });
+const signup = async (req, res) => {
+    const { name, email, password, cnfPassword, role } = req.body;
+    try {
+        if (password !== cnfPassword) {
+            return res.status(400).json({ error: "Passwords do not match" });
+        }
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ error: "User already exists" });
+        }
+        const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS));
+        const newUser = new User({ name, email, role, password: hashedPassword });
+        await newUser.save();
+        res.status(201).json({ message: "User registered successfully" });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
 }
-const signout = (req, res) => {
+const signout = async (req, res) => {
+    const token = req.cookies.token;
+    const userEmail = req.user.email;
+    // res.status(200).json({ message: "Signout successful", user: user });
+    try {
+        const FindUser = await User.findOne({ email: userEmail });
+        if (!FindUser) return res.status(404).json({ error: "User not found" });
+        FindUser.tokens = FindUser.tokens.filter(t => t.token !== token);
+        await FindUser.save();
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
     res.clearCookie('token', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         path: '/', // Important: must match the path used when setting the cookie
     });
-    res.status(200).json({ "response": "ok", "type": "signout" });
+    res.status(200).json({ "response": "success", "type": "signout" });
 }
 
-const checkAuth = (req, res) => {
+const checkAuth = async (req, res) => {
 
-    
-    // const { email} = req.user;
-    // try {
-    //     const FindAdmin = await Admin.findOne({ email });
-    //     if (!FindAdmin) return res.status(404).json({ error: "Admin not found" });
-    //     const isMatch = await FindAdmin.comparePassword(password);
-    //     if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
 
-    //     res.status(200).json({
-    //         message: "Authenticated",
-    //         user: req.user.email // This will contain the decoded JWT payload
-    //     });
+    const { email } = req.user;
+    // res.status(200).json({ email });
+    try {
+        const FindUser = await User.findOne({ email });
+        if (!FindUser) return res.status(404).json({ error: "User not found" });
 
-    // } catch (error){
-    //     res.status(500).message("error in user authnetication")
-    // }
+        res.status(200).json({
+            message: "Authenticated",
+            user: req.user.email // This will contain the decoded JWT payload
+        });
 
-    // console.log("auth chek",new Date(), req.user.email)
-    res.status(200).json({
-        message: "Authenticated",
-        user: req.user.email // This will contain the decoded JWT payload
-    });
+
+    } catch (error) {
+        res.status(500).json({ status: "failed", message: "error in user authentication" })
+    }
+
 }
 module.exports = { signin, signup, checkAuth, signout }

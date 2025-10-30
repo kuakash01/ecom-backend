@@ -27,9 +27,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use(cookieParser()); // middleware for parsing cookies
 
 
-// routes
-app.use("/api/auth", require("./routes/auth.routes"))
-app.use("/api/products", require("./routes/products.routes"))
+// route registration
+app.use('/api', require('./routes/index'));
 
 
 // app listening
