@@ -1,6 +1,6 @@
 // const mongoose = require('mongoose');
-const Product = require('../models/product.model'); // Product Model
-const cloudinary = require('../config/cloudinary');
+const Product = require('../../models/product.model'); // Product Model
+const cloudinary = require('../../config/cloudinary');
 const streamifier = require('streamifier');
 
 
@@ -25,7 +25,7 @@ const uploadToCloudinary = (buffer, folder) => {
 // src/controllers/product.controller.js
 const addProduct = async (req, res) => {
   try {
-    const { name, price, mrp, description, category, quantity, size, rating } = req.body;
+    const { name, price, mrp, size, category, quantity, sku, tags, description } = req.body;
 
     if (!req.files || !req.files.thumbnail) {
       return res.status(400).json({ message: "Thumbnail is required" });
@@ -63,7 +63,8 @@ const addProduct = async (req, res) => {
       category,
       quantity,
       size,
-      rating,
+      sku,
+      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
     });
 
     res.status(201).json({
@@ -101,10 +102,85 @@ const getProductDetails = async (req, res) => {
   }
 }
 
+// const updateProduct = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { name, price, mrp, size, category, quantity, sku, tags, description } = req.body;
+
+//     const product = await Product.findById(id);
+//     if (!product) {
+//       return res.status(404).json({ message: "Product not found" });
+//     }
+
+//     // 1. Update Thumbnail (if new thumbnail is uploaded)
+//     if (req.files && req.files.thumbnail) {
+      
+//       // Delete old thumbnail from Cloudinary
+//       // if (product.thumbnail && product.thumbnail.public_id) {
+//       //   await cloudinary.uploader.destroy(product.thumbnail.public_id);
+//       // }
+
+//       // Upload new thumbnail
+//       const thumbnailFile = req.files.thumbnail[0];
+//       const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
+//       product.thumbnail = {
+//         url: thumbnailResult.secure_url,
+//         public_id: thumbnailResult.public_id,
+//       };
+//     }
+
+//     // 2. Update Gallery (if new gallery images are uploaded)
+//     if (req.files && req.files.gallery && req.files.gallery.length > 0) {
+
+//       // Delete old gallery images
+//       // if (product.gallery && product.gallery.length > 0) {
+//       //   await Promise.all(
+//       //     product.gallery.map((img) => cloudinary.uploader.destroy(img.public_id))
+//       //   );
+//       // }
+
+//       // Upload new gallery
+//       const newGallery = await Promise.all(
+//         req.files.gallery.map(async (file) => {
+//           const result = await uploadToCloudinary(file.buffer, "products/gallery");
+//           return {
+//             url: result.secure_url,
+//             public_id: result.public_id,
+//           };
+//         })
+//       );
+
+//       product.gallery = newGallery;
+//     }
+
+//     // 3. Update other fields
+//     product.name = name ?? product.name;
+//     product.price = price ?? product.price;
+//     product.mrp = mrp ?? product.mrp;
+//     product.description = description ?? product.description;
+//     product.category = category ?? product.category;
+//     product.quantity = quantity ?? product.quantity;
+//     product.size = size ?? product.size;
+//     product.sku = sku ?? product.sku;
+//     product.tags = tags ? tags.split(',').map(tag => tag.trim()) : product.tags;
+
+//     await product.save();
+
+//     res.status(200).json({
+//       message: "Product updated successfully",
+//       data: product,
+//     });
+//   } catch (err) {
+//     // console.error("Error in updateProduct:", err);
+//     res.status(500).json({ message: "Update failed", error: err.message });
+//   }
+// };
+
+
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, price, mrp, description, category, quantity, size, rating } = req.body;
+    const { name, price, mrp, size, category, quantity, sku, tags, description, existingGallery } = req.body;
 
     const product = await Product.findById(id);
     if (!product) {
@@ -113,32 +189,41 @@ const updateProduct = async (req, res) => {
 
     // 1. Update Thumbnail (if new thumbnail is uploaded)
     if (req.files && req.files.thumbnail) {
-      
-      // Delete old thumbnail from Cloudinary
+      // Delete old thumbnail from Cloudinary (disabled intentionally)
       // if (product.thumbnail && product.thumbnail.public_id) {
       //   await cloudinary.uploader.destroy(product.thumbnail.public_id);
       // }
 
-      // Upload new thumbnail
       const thumbnailFile = req.files.thumbnail[0];
       const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
+
       product.thumbnail = {
         url: thumbnailResult.secure_url,
         public_id: thumbnailResult.public_id,
       };
     }
 
-    // 2. Update Gallery (if new gallery images are uploaded)
-    if (req.files && req.files.gallery && req.files.gallery.length > 0) {
+    // 2. Update Gallery
+    // Keep only existing URLs that are still sent in the request (req.body.existingGallery)
+    let updatedGallery = [];
 
-      // Delete old gallery images
+    if (existingGallery) {
+      // Parse existingGallery (it can come as string or array)
+      const existing = Array.isArray(existingGallery)
+        ? existingGallery
+        : [existingGallery];
+      updatedGallery = product.gallery.filter(img => existing.includes(img.url));
+    }
+
+    // If new gallery images are uploaded, append them
+    if (req.files && req.files.gallery && req.files.gallery.length > 0) {
+      // Delete old gallery images (disabled intentionally)
       // if (product.gallery && product.gallery.length > 0) {
       //   await Promise.all(
       //     product.gallery.map((img) => cloudinary.uploader.destroy(img.public_id))
       //   );
       // }
 
-      // Upload new gallery
       const newGallery = await Promise.all(
         req.files.gallery.map(async (file) => {
           const result = await uploadToCloudinary(file.buffer, "products/gallery");
@@ -149,8 +234,12 @@ const updateProduct = async (req, res) => {
         })
       );
 
-      product.gallery = newGallery;
+      // Append new images to the filtered old ones
+      updatedGallery = [...updatedGallery, ...newGallery];
     }
+
+    // Replace gallery with final updated list
+    product.gallery = updatedGallery;
 
     // 3. Update other fields
     product.name = name ?? product.name;
@@ -160,7 +249,8 @@ const updateProduct = async (req, res) => {
     product.category = category ?? product.category;
     product.quantity = quantity ?? product.quantity;
     product.size = size ?? product.size;
-    product.rating = rating ?? product.rating;
+    product.sku = sku ?? product.sku;
+    product.tags = tags ? tags.split(",").map(tag => tag.trim()) : product.tags;
 
     await product.save();
 
@@ -169,8 +259,8 @@ const updateProduct = async (req, res) => {
       data: product,
     });
   } catch (err) {
-    // console.error("Error in updateProduct:", err);
     res.status(500).json({ message: "Update failed", error: err.message });
+    console.log("Error updating product", err)
   }
 };
 
@@ -179,12 +269,12 @@ const deleteProduct = async (req, res) => {
   const { id } = req.params;
   try {
     if (!id)
-      res.status(400).json({ error: "Product Id is required" })
+      res.status(400).json({status:"failed", message:"Product Id is required", error: "Product Id is required" })
 
       // Find the product first 
     const product = await Product.findById(id)
     if (!product)
-      return res.status(404).json({ error: "Product not found" });
+      return res.status(404).json({ status: "failed", message:"Product not found", error: "Product not found" });
 
     
     // Optional: Delete image from Cloudinary
@@ -201,7 +291,7 @@ const deleteProduct = async (req, res) => {
     // Delete the product from the database
     await Product.deleteOne({ _id: id });
 
-    res.status(200).json({ message: "Product deleted successfully" });
+    res.status(200).json({ status:"success", message: "Product deleted successfully" });
 
   } catch (error) {
     console.error("Delete error:", error);

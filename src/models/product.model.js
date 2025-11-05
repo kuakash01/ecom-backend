@@ -34,28 +34,38 @@ const productSchema = new mongoose.Schema(
     ],
 
     // Product can belong to multiple categories
-    categories: [
+    category: 
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Category",
       },
-    ],
 
-    stock: {
+    quantity: {
       type: Number,
       default: 0,
     },
 
+    sku:{
+      type: String,
+      required: true,
+    },
     size: {
       type: String, // You can also use [String] if product has multiple sizes
       required: true,
     },
-
+    tags: {
+      type: [String],
+      default: [],
+    },
     rating: {
       type: Number,
       default: 0,
       min: 0,
       max: 5,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false
     },
   },
   {

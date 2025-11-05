@@ -6,11 +6,43 @@ const orderSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    cart: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Cart',
-        required: true
-    },
+    items: [
+        {
+            product: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'Product', // keep optional reference (for analytics/admin lookup)
+            },
+            name: { type: String, required: true },
+            price: { type: Number, required: true },
+            mrp: { type: Number, required: true },
+            description: String,
+
+            // store a copy of thumbnail
+            thumbnail: {
+                url: { type: String, required: true },
+                public_id: { type: String, required: true },
+            },
+
+            // store a copy of gallery images
+            gallery: [
+                {
+                    url: { type: String, required: true },
+                    public_id: { type: String, required: true },
+                },
+            ],
+
+            categories: [
+                {
+                    type: mongoose.Schema.Types.ObjectId,
+                    ref: 'Category',
+                },
+            ],
+
+            size: { type: String, required: true },
+            quantity: { type: Number, required: true },
+            subTotal: { type: Number, required: true },
+        },
+    ],
     totalAmount: {
         type: Number,
         required: true
@@ -20,15 +52,27 @@ const orderSchema = new mongoose.Schema({
         enum: ['pending', 'shipped', 'delivered', 'cancelled'],
         default: 'pending'
     },
-    BillingAddress: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Address',
-        required: true
-    },
     shippingAddress: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Address',
-        required: true
+        fullName: { type: String, required: true },
+        phone: { type: String, required: true },
+        street: { type: String, required: true },
+        city: { type: String, required: true },
+        state: { type: String, required: true },
+        country: { type: String, required: true },
+        pincode: { type: String, required: true },
+    },
+    billingAddress: {
+        fullName: { type: String, required: true },
+        phone: { type: String, required: true, match: [/^[0-9]{10}$/, 'Phone number must be 10 digits'] },
+        alternatePhone: { type: String, match: [/^[0-9]{10}$/, 'Phone number must be 10 digits'] },
+        street: { type: String, required: true },
+        city: { type: String, required: true },
+        state: { type: String, required: true },
+        country: { type: String, required: true },
+        pincode: { type: String, required: true },
+    },
+    deliveryDate: {
+        type: Date,
     },
 
     paymentDetails: {
@@ -49,7 +93,7 @@ const orderSchema = new mongoose.Schema({
             enum: ['pending', 'completed', 'failed'],
             default: 'pending'
         },
-        
+
     }
 }, { timestamps: true });
 

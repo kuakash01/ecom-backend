@@ -6,12 +6,18 @@ const addressSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     },
-    phone: {
+    fullName: {
         type: String,
         required: true
     },
+    phone: {
+        type: String,
+        required: true,
+        match: [/^[0-9]{10}$/, 'Phone number must be 10 digits']
+    },
     alternatePhone: {
         type: String,
+        match: [/^[0-9]{10}$/, 'Phone number must be 10 digits']
     },
     street: {
         type: String,
@@ -32,7 +38,12 @@ const addressSchema = new mongoose.Schema({
     },
     pincode: {
         type: String,
-        required: true
+        required: true,
+        match: [/^\d{6}$/, 'Invalid Indian pincode'],
+    },
+    isDefault: {
+        type: Boolean,
+        default: false
     }
 });
 
