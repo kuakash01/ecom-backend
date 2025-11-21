@@ -1,213 +1,248 @@
 // const mongoose = require('mongoose');
 const Product = require('../models/product.model'); // Product Model
-const cloudinary = require('../config/cloudinary');
-const streamifier = require('streamifier');
+const Order = require('../models/order.model');
 
 
-
-
-const uploadToCloudinary = (buffer, folder) => {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder,
-      },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result);
-      }
-    );
-
-    streamifier.createReadStream(buffer).pipe(stream);
-  });
-};
-
-// src/controllers/product.controller.js
-const addProduct = async (req, res) => {
-  try {
-    const { name, price, mrp, description, category, quantity, size, rating } = req.body;
-
-    if (!req.files || !req.files.thumbnail) {
-      return res.status(400).json({ message: "Thumbnail is required" });
-    }
-
-    // 1. Upload Thumbnail (single file)
-    const thumbnailFile = req.files.thumbnail[0];
-    const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
-
-    // 2. Upload Gallery (multiple files)
-    let gallery = [];
-    if (req.files.gallery && req.files.gallery.length > 0) {
-      gallery = await Promise.all(
-        req.files.gallery.map(async (file) => {
-          const result = await uploadToCloudinary(file.buffer, "products/gallery");
-          return {
-            url: result.secure_url,
-            public_id: result.public_id,
-          };
-        })
-      );
-    }
-
-    // 3. Save product
-    const newProduct = await Product.create({
-      name,
-      price,
-      mrp,
-      description,
-      thumbnail: {
-        url: thumbnailResult.secure_url,
-        public_id: thumbnailResult.public_id,
-      },
-      gallery,
-      category,
-      quantity,
-      size,
-      rating,
-    });
-
-    res.status(201).json({
-      message: "Product created successfully",
-      data: newProduct,
-    });
-  } catch (err) {
-    console.error("Error in addProduct:", err);
-    res.status(500).json({ message: "Upload failed", error: err.message });
-  }
-};
 
 
 const getAllProducts = async (req, res) => {
   try {
     const products = await Product.find({});
-    res.status(200).json({ success: true, data: products });
+    return res.status(200).json({ status: "success", message: "Products find successfully", data: products });
   }
   catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ status: "failed", message: "Products find successfully", error: err.message });
   }
 }
 
 
 const getProductDetails = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.productId)
+      .populate("variants.color variants.size").populate("colorGalleries.color")
+      .select("title description category thumbnail variants colorGalleries");
+
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
-    }
-    res.status(200).json({ success: true, data: product });
-  }
-  catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}
-
-const updateProduct = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, price, mrp, description, category, quantity, size, rating } = req.body;
-
-    const product = await Product.findById(id);
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
     }
 
-    // 1. Update Thumbnail (if new thumbnail is uploaded)
-    if (req.files && req.files.thumbnail) {
-      
-      // Delete old thumbnail from Cloudinary
-      // if (product.thumbnail && product.thumbnail.public_id) {
-      //   await cloudinary.uploader.destroy(product.thumbnail.public_id);
-      // }
+    // Filter only available variants
+    const inStock = product.variants.filter(v => v.quantity > 0);
 
-      // Upload new thumbnail
-      const thumbnailFile = req.files.thumbnail[0];
-      const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
-      product.thumbnail = {
-        url: thumbnailResult.secure_url,
-        public_id: thumbnailResult.public_id,
-      };
-    }
-
-    // 2. Update Gallery (if new gallery images are uploaded)
-    if (req.files && req.files.gallery && req.files.gallery.length > 0) {
-
-      // Delete old gallery images
-      // if (product.gallery && product.gallery.length > 0) {
-      //   await Promise.all(
-      //     product.gallery.map((img) => cloudinary.uploader.destroy(img.public_id))
-      //   );
-      // }
-
-      // Upload new gallery
-      const newGallery = await Promise.all(
-        req.files.gallery.map(async (file) => {
-          const result = await uploadToCloudinary(file.buffer, "products/gallery");
-          return {
-            url: result.secure_url,
-            public_id: result.public_id,
-          };
-        })
+    let defaultVariant = null;
+    if (inStock.length > 0) {
+      defaultVariant = inStock.reduce(
+        (min, variant) => (variant.price < min.price ? variant : min),
+        inStock[0]
       );
-
-      product.gallery = newGallery;
+    } else {
+      // If no variants are in stock, just pick the first variant as default
+      defaultVariant = product.variants[0];
     }
 
-    // 3. Update other fields
-    product.name = name ?? product.name;
-    product.price = price ?? product.price;
-    product.mrp = mrp ?? product.mrp;
-    product.description = description ?? product.description;
-    product.category = category ?? product.category;
-    product.quantity = quantity ?? product.quantity;
-    product.size = size ?? product.size;
-    product.rating = rating ?? product.rating;
+    const colorGallery = product.colorGalleries?.find(cg => cg.color._id.toString() === defaultVariant.color._id.toString());
+    if (colorGallery) {
+      product.defaultGallery = colorGallery.gallery;
+    } else {
+      product.defaultGallery = [];
+    }
 
-    await product.save();
+    let allColors = product.colorGalleries.map(cg => ({ _id: cg.color._id.toString(), colorName: cg.color.colorName, colorHex: cg.color.colorHex }));
 
-    res.status(200).json({
-      message: "Product updated successfully",
-      data: product,
+    let allSizesOfaVarient = product.variants
+      .filter(v => v.color._id.toString() === defaultVariant.color._id.toString())
+      .map(v => ({ _id: v.size._id.toString(), sizeName: v.size.sizeName }));
+
+    const responsePayload = {
+      title: product.title,
+      description: product.description,
+      category: product.category,
+      thumbnail: product.thumbnail,
+      variants: product.variants,
+      defaultGallery: product.defaultGallery,
+      defaultVariant,
+      allColors,
+      defaultSizes: allSizesOfaVarient
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: responsePayload
     });
   } catch (err) {
-    // console.error("Error in updateProduct:", err);
-    res.status(500).json({ message: "Update failed", error: err.message });
+    console.error("Error in getProductDetails:", err);
+    res.status(500).json({ success: false, error: err.message });
   }
 };
 
 
-const deleteProduct = async (req, res) => {
-  const { id } = req.params;
+
+const getNewArrivals = async (req, res) => {
   try {
-    if (!id)
-      res.status(400).json({ error: "Product Id is required" })
+    const products = await Product.find({ newArrival: true }).populate({
+      path: "category",
+      select: "name"
+    }).populate({
+      path: "variants.color",
+      select: "colorName"
+    }).populate({
+      path: "variants.size",
+      select: "sizeName"
+    }).lean();
 
-      // Find the product first 
-    const product = await Product.findById(id)
-    if (!product)
-      return res.status(404).json({ error: "Product not found" });
-
-    
-    // Optional: Delete image from Cloudinary
-    if (product.image && product.image.public_id) {
-      await cloudinary.uploader.destroy(product.image.public_id);
+    if (!products.length) {
+      return res.status(404).json({
+        status: "failed",
+        message: "No Products in new Arrivals"
+      });
     }
 
-    if (product.gallery && product.gallery.length > 0) {
-      await Promise.all(
-        product.gallery.map((img) => cloudinary.uploader.destroy(img.public_id))
-      );
-    }
+    const lowestPriceProducts = products.map(product => {
+      // Safe fallback if no variants
+      if (!product.variants || product.variants.length === 0) {
+        return {
+          _id: product._id,
+          title: product.title,
+          thumbnail: product.thumbnail,
+          category: product.category,
+          price: null,
+          mrp: null
+        };
+      }
 
-    // Delete the product from the database
-    await Product.deleteOne({ _id: id });
+      // Filter only in-stock variants first
+      const inStockVariants = product?.variants?.filter(v => v.quantity > 0) || [];
 
-    res.status(200).json({ message: "Product deleted successfully" });
+      let lowestVariant = null;
+
+      if (inStockVariants.length > 0) {
+        lowestVariant = inStockVariants.reduce(
+          (min, variant) => variant.price < min.price ? variant : min,
+          inStockVariants[0]
+        );
+      }
+
+
+      return {
+        _id: product._id,
+        title: product.title,
+        thumbnail: product.thumbnail,
+        category: product.category.name,
+        price: lowestVariant.price,
+        mrp: lowestVariant.mrp,
+        color: lowestVariant.color.colorName,
+        size: lowestVariant.size.sizeName
+      };
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "New Arrivals fetched successfully",
+      data: lowestPriceProducts
+    });
 
   } catch (error) {
-    console.error("Delete error:", error);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({
+      status: "failed",
+      message: "Internal Server Error",
+      error: error.message
+    });
+  }
+};
+
+const getBestSeller = async (req, res) => {
+  try {
+    const products = await Order.aggregate([
+      { $unwind: "$items" },
+
+      {
+        $group: {
+          _id: "$items.product",
+          totalSold: { $sum: "$items.quantity" }
+        }
+      },
+
+      { $sort: { totalSold: -1 } },
+
+      { $limit: 10 },
+
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "productDetails"
+        }
+      },
+
+      { $unwind: "$productDetails" },
+
+      {
+        $replaceRoot: {
+          newRoot: "$productDetails"
+        }
+      }
+    ]);
+
+
+    if (products.length === 0)
+      return res.status(404).json({ status: "failed", message: "No product found" });
+
+    const lowestPriceProducts = products.map(product => {
+      // Safe fallback if no variants
+      if (!product.variants || product.variants.length === 0) {
+        return {
+          _id: product._id,
+          title: product.title,
+          thumbnail: product.thumbnail,
+          category: product.category,
+          price: null,
+          mrp: null
+        };
+      }
+
+      const lowestVariant = product.variants.reduce(
+        (min, variant) => (variant.price < min.price ? variant : min),
+        product.variants[0]
+      );
+
+      return {
+        _id: product._id,
+        title: product.title,
+        thumbnail: product.thumbnail,
+        category: product.category,
+        price: lowestVariant.price,
+        mrp: lowestVariant.mrp
+      };
+    });
+
+    return res.status(200).json({ status: "success", message: "product fetch successfully", data: lowestPriceProducts });
+  } catch (error) {
+    return res.status(500).json({ status: "failed", message: "Internal Server error" });
   }
 }
 
+const getColorGallery = async (req, res) => {
+  try {
+    const { productId, colorId } = req.params;
+    const product = await Product.findById(productId).select("colorGalleries");
 
-module.exports = { addProduct, getAllProducts, getProductDetails, updateProduct, deleteProduct }
+    if (!product) {
+      return res.status(404).json({ status: "failed", message: "Product not found" });
+    }
+    const colorGallery = product.colorGalleries.find(cg => cg.color.toString() === colorId);
+
+    if (!colorGallery) {
+      return res.status(404).json({ status: "failed", message: "Color gallery not found for the specified color" });
+    }
+
+    return res.status(200).json({ status: "success", message: "Color gallery fetched successfully", data: colorGallery });
+  } catch (error) {
+    return res.status(500).json({ status: "failed", message: "Internal Server Error", error: error.message });
+  }
+};
+
+module.exports = { getAllProducts, getProductDetails, getNewArrivals, getBestSeller, getColorGallery }

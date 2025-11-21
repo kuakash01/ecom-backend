@@ -2,19 +2,12 @@ const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(
   {
-    name: {
+    title: {
       type: String,
       required: true,
       trim: true,
     },
-    price: {
-      type: Number,
-      required: true,
-    },
-    mrp: {
-      type: Number,
-      required: true,
-    },
+
     description: {
       type: String,
     },
@@ -25,35 +18,47 @@ const productSchema = new mongoose.Schema(
       public_id: { type: String, required: true },
     },
 
-    // Gallery (extra images)
-    gallery: [
-      {
-        url: { type: String, required: true },
-        public_id: { type: String, required: true },
-      },
-    ],
 
     // Product can belong to multiple categories
-    category: 
+    category:
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+    },
+
+    variants: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Category",
-      },
+        color: { type: mongoose.Schema.Types.ObjectId, ref: "Color" },
+        size: { type: mongoose.Schema.Types.ObjectId, ref: "Size" },
+        price: { type: Number, required: true },
+        mrp: { type: Number, required: true },
+        quantity: { type: Number, default: 0 },
+        sku: { type: String, },
 
-    quantity: {
-      type: Number,
-      default: 0,
-    },
+      }
+    ],
+    // Color-wise gallery
+    colorGalleries: [
+      {
+        color: { type: mongoose.Schema.Types.ObjectId, ref: "Color" },
+        gallery: [
+          {
+            url: String,
+            public_id: String
+          }
+        ]
+      }
+    ],
 
-    sku:{
-      type: String,
-      required: true,
+    newArrival: {
+      type: Boolean,
+      default: false
     },
-    size: {
-      type: String, // You can also use [String] if product has multiple sizes
-      required: true,
+    searchTags: {
+      type: [String],
+      default: [],
     },
-    tags: {
+    filterTags: {
       type: [String],
       default: [],
     },
@@ -74,3 +79,5 @@ const productSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("Product", productSchema);
+
+

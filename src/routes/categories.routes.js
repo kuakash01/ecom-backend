@@ -6,12 +6,13 @@ const roleCheck = require("../middlewares/roleCheck")
 
 
 // controller
-const { getCategories, getCategory, getCategoriesTree} = require("../conrollers/categories.controller")
+const { getCategories, getCategory, getCategoriesTree, getRootCategories} = require("../conrollers/categories.controller")
 
 
-router.get("/", verifyToken, roleCheck(["admin", "user"]), getCategories);
-router.get("/tree", verifyToken, roleCheck(["admin", "user"]), getCategoriesTree); // tree based for website
-router.get("/:id", verifyToken, roleCheck(["admin", "user"]), getCategory);
+router.get("/",  getCategories);
+router.get("/tree",  getCategoriesTree); // tree based for website
+router.get("/root",  getRootCategories); // root categories
+router.get("/:id",  getCategory);
 
 
 module.exports = router;

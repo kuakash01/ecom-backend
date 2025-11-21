@@ -1,18 +1,17 @@
 const express = require('express');
 const router = express.Router();
-// const upload = require('../middleware/upload'); // path to your upload middleware
-const upload = require('../config/multer');
-const { addProduct, getAllProducts, getProductDetails, updateProduct, deleteProduct} = require('../conrollers/product.controller'); // path to your product controller
-const verifyToken = require('../middlewares/verifyToken'); // Middleware to verify token
-const roleCheck = require("../middlewares/roleCheck");
+
+const { getAllProducts, getProductDetails, getNewArrivals, getBestSeller, getColorGallery } = require('../conrollers/product.controller'); // path to your product controller
+
 
 
 // Matches the key in your FormData → formData.append("productImage", file)
-router.post('/',verifyToken, roleCheck("admin"), upload.fields([{ name: 'thumbnail', maxCount: 1 }, { name: 'gallery', maxCount: 5 }]), addProduct);
+
 router.get('/', getAllProducts);
-router.get('/:id', getProductDetails);
-router.patch('/:id', verifyToken, roleCheck("admin"), upload.fields([{ name: 'thumbnail', maxCount: 1 }, { name: 'gallery', maxCount: 5 }]), updateProduct);
-router.delete("/:id", verifyToken, roleCheck("admin"), deleteProduct);
+router.get('/newArrivals', getNewArrivals);
+router.get('/bestSeller', getBestSeller);
+router.get('/:productId', getProductDetails);
+router.get('/:productId/color-gallery/:colorId', getColorGallery);
 
 
 

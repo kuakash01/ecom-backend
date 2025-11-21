@@ -5,7 +5,6 @@ const categorySchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        unique: true
     },
     description: {
         type: String,
@@ -16,7 +15,11 @@ const categorySchema = new mongoose.Schema({
         ref: 'Category',
         default: null
     },
-    
+    image: {
+        url: { type: String, required: true },
+        public_id: { type: String, required: true },
+    },
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('Category', categorySchema);

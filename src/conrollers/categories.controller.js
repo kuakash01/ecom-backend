@@ -2,19 +2,19 @@ const Categories = require("../models/categories.model");
 
 
 const getCategories = async (req, res) => {
-    try {
-        const categories = await Categories.find();
-        res.status(200).json({ status: "success", data: categories });
-    } catch (error) {
-        res.status(500).json({ status: "failed", error: error.message });
-    }
+  try {
+    const categories = await Categories.find();
+    res.status(200).json({ status: "success", data: categories });
+  } catch (error) {
+    res.status(500).json({ status: "failed", error: error.message });
+  }
 };
 const getCategoriesTree = async (req, res) => {
   try {
     const categories = await Categories.find();
     if (!categories || categories.length === 0) {
-            return res.status(404).json({ status: "failed", message: "Category not found" });
-        }
+      return res.status(404).json({ status: "failed", message: "Category not found" });
+    }
 
     const buildTree = (categories, parentId = null) => {
       return categories
@@ -38,17 +38,29 @@ const getCategoriesTree = async (req, res) => {
 };
 
 const getCategory = async (req, res) => {
-    try {
-        const category = await Categories.findById(req.params.id);
-        if (!category) {
-            return res.status(404).json({ status: "failed", message: "Category not found" });
-        }
-        res.status(200).json({ status: "success", data: category });
-    } catch (error) {
-        res.status(500).json({ status: "failed", error: error.message });
+  try {
+    const category = await Categories.findById(req.params.id);
+    if (!category) {
+      return res.status(404).json({ status: "failed", message: "Category not found" });
     }
+    res.status(200).json({ status: "success", data: category });
+  } catch (error) {
+    res.status(500).json({ status: "failed", error: error.message });
+  }
 };
 
+const getRootCategories = async (req, res) => {
+  try {
+    const categories = await Categories.find({ parent: null });
+    if (categories.length === 0)
+      res.status(404).json({ status: "failed", message: "Root Categories not found" });
+
+    res.status(200).json({ status: "success", message: "Root Categories fetch successfully", data: categories});
+  } catch (error) {
+    res.status(500).json({ status: "failed", message: "Internal server error" });
+  }
+}
 
 
-module.exports = {getCategories, getCategoriesTree, getCategory};
+
+module.exports = { getCategories, getCategoriesTree, getCategory, getRootCategories };
