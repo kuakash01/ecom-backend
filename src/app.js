@@ -14,6 +14,7 @@ require('./config/connection.db')(); // Import and call the connection function
 
 const PORT = process.env.PORT || 5000;
 const HOSTNAME = process.env.HOSTNAME || 'localhost';
+const isProduction = process.env.NODE_ENV === 'production';
 
 
 //middleware
@@ -31,7 +32,11 @@ app.use(cookieParser()); // middleware for parsing cookies
 app.use('/api', require('./routes/index'));
 
 
-// app listening
-app.listen(PORT, HOSTNAME, () => {
-    console.log(`Server is running on http://${HOSTNAME}:${PORT}`);
-})
+// app listening server 
+app.listen(PORT, () => {
+  if (isProduction) {
+    console.log(`Server running in production on port ${PORT}`);
+  } else {
+    console.log(`Server running locally at http://${HOSTNAME}:${PORT}`);
+  }
+});
