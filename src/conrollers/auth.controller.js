@@ -23,7 +23,7 @@ const signin = async (req, res) => {
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // Set to true in production
-            sameSite: 'lax', // Adjust based on your needs
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // for cross-site
             maxAge: 24 * 60 * 60 * 1000, // 1 days
             path: '/',
         });
