@@ -20,17 +20,20 @@ const signin = async (req, res) => {
         FindUser.tokens.push({ token });
         await FindUser.save();
 
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production', // Set to true in production
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // for cross-site
-            maxAge: 24 * 60 * 60 * 1000, // 1 days
-            path: '/',
-        });
+       
+
+        // res.cookie('token', token, {
+        //     httpOnly: true,
+        //     secure: process.env.NODE_ENV === 'production', // Set to true in production
+        //     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // for cross-site
+        //     maxAge: 24 * 60 * 60 * 1000, // 1 days
+        //     path: '/',
+        // });
 
         res.status(200).json({
             message: "Login successful",
             user: FindUser.email,
+            token: token
         });
     } catch (error) {
         return res.status(500).json({ error: error.message });
