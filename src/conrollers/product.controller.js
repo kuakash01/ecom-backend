@@ -52,10 +52,6 @@ const getProductDetails = async (req, res) => {
 
     let allColors = product.colorGalleries.map(cg => ({ _id: cg.color._id.toString(), colorName: cg.color.colorName, colorHex: cg.color.colorHex }));
 
-    let allSizesOfaVarient = product.variants
-      .filter(v => v.color._id.toString() === defaultVariant.color._id.toString())
-      .map(v => ({ _id: v.size._id.toString(), sizeName: v.size.sizeName }));
-
     const responsePayload = {
       title: product.title,
       description: product.description,
@@ -65,7 +61,6 @@ const getProductDetails = async (req, res) => {
       defaultGallery: product.defaultGallery,
       defaultVariant,
       allColors,
-      defaultSizes: allSizesOfaVarient
     };
 
     return res.status(200).json({
