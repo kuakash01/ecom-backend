@@ -243,7 +243,7 @@ const addProduct = async (req, res) => {
 
 const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({}).select('title thumbnail category  searchTags filterTags newArrival description createdAt updatedAt ').lean();
+    const products = await Product.find({}).select('title thumbnail category  searchTags filterTags newArrival description category createdAt updatedAt ').populate("category", "name slug");
     res.status(200).json({ status: "success", message: "Products retrieved successfully", data: products });
   }
   catch (err) {
@@ -480,123 +480,6 @@ const getColorWiseGallery = async (req, res) => {
   }
 };
 
-// const updateColorWiseGallery = async (req, res) => {
-//   try {
-//     const { productId, colorId } = req.params;
-
-//     // Step 1: Check if product exists BEFORE uploading anything
-//     const product = await Product.findById(productId);
-//     if (!product) {
-//       return res.status(404).json({
-//         status: "failed",
-//         message: "Product not found",
-//       });
-//     }
-
-//     // Data from frontend
-//     const existingGallery = req.body.gallery ? JSON.parse(req.body.gallery) : [];
-//     const newImages = req.files?.newImages || []; // multer gives array
-
-//     const uploadedImages = [];
-
-//     // Step 2: Upload ONLY if files exist
-//     if (Array.isArray(newImages) && newImages.length > 0) {
-//       for (const file of newImages) {
-//         if (!file || !file.buffer) continue;
-
-//         const uploaded = await uploadToCloudinary(
-//           file.buffer,
-//           "products/color-galleries"
-//         );
-
-//         uploadedImages.push({
-//           url: uploaded.secure_url,
-//           public_id: uploaded.public_id,
-//         });
-//       }
-//     }
-
-//     // Step 3: Find or create color gallery
-//     let colorGallery = product.colorGalleries.find(
-//       (cg) => cg.color.toString() === colorId
-//     );
-
-//     if (!colorGallery) {
-//       colorGallery = {
-//         color: colorId,
-//         gallery: [],
-//       };
-//       product.colorGalleries.push(colorGallery);
-//     }
-
-//     // Step 4: Merge old + new images
-//     colorGallery.gallery = [...existingGallery, ...uploadedImages];
-
-//     await product.save();
-
-//     return res.status(200).json({
-//       status: "success",
-//       message: "Color-wise gallery updated",
-//       colorGallery,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       status: "failed",
-//       message: "Internal Server Error",
-//       error: error.message,
-//     });
-//   }
-// };
-
-// const updateColorWiseGallery = async (req, res) => {
-//   try {
-//     const { productId, colorId } = req.params;
-
-//     const product = await Product.findById(productId);
-//     if (!product) {
-//       return res.status(404).json({ status: "failed", message: "Product not found" });
-//     }
-
-//     const newImages = req.files?.newImages || []; // multer array
-//     const uploadedImages = [];
-
-//     // Upload new images if any
-//     for (const file of newImages) {
-//       if (!file || !file.buffer) continue;
-
-//       const uploaded = await uploadToCloudinary(file.buffer, "products/color-galleries");
-//       uploadedImages.push({
-//         url: uploaded.secure_url,
-//         public_id: uploaded.public_id,
-//       });
-//     }
-
-//     // Find or create color gallery
-//     let colorGallery = product.colorGalleries.find(cg => cg.color.toString() === colorId);
-
-//     if (!colorGallery) {
-//       colorGallery = { color: colorId, gallery: [] };
-//       product.colorGalleries.push(colorGallery);
-//     }
-
-//     // Merge uploaded images only (don’t rely on req.body.gallery)
-//     colorGallery.gallery.push(...uploadedImages);
-
-//     await product.save();
-
-//     return res.status(200).json({
-//       status: "success",
-//       message: "Color-wise gallery updated",
-//       colorGallery,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       status: "failed",
-//       message: "Internal Server Error",
-//       error: error.message,
-//     });
-//   }
-// };
 
 const updateColorWiseGallery = async (req, res) => {
   try {
@@ -623,8 +506,16 @@ const updateColorWiseGallery = async (req, res) => {
 
     // Find or create color gallery
     let colorGallery = product.colorGalleries.find(cg => cg.color.toString() === colorId);
+    // if (!colorGallery) {
+    //   colorGallery = { color: colorId, gallery: [] };
+    //   product.colorGalleries.push(colorGallery);
+    // }
     if (!colorGallery) {
-      colorGallery = { color: colorId, gallery: [] };
+      colorGallery = product.colorGalleries.create({
+        color: colorId,
+        gallery: []
+      });
+
       product.colorGalleries.push(colorGallery);
     }
 

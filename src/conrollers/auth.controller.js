@@ -1,94 +1,116 @@
-const User = require("../models/user.model");
-const bcrypt = require("bcryptjs");
+const sendEmail = require("../config/nodemailer");
+const Users = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 
 
-const signin = async (req, res) => {
-    const { email, password } = req.body;
+const otpStore = {};
+
+
+function generateOTP() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+const sendOtp = async (req, res) => {
     try {
-        const FindUser = await User.findOne({ email });
-        if (!FindUser) return res.status(404).json({ error: "User not found" });
-        const isMatch = await FindUser.comparePassword(password);
-        if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
+        const { email } = req.body;
 
-        // Generate JWT or session token here
-        const token = jwt.sign(
-            { id: FindUser._id, role: FindUser.role, email: FindUser.email },
-            process.env.JWT_SECRET,
-            { expiresIn: '1d' }
-        );
-        FindUser.tokens.push({ token });
-        await FindUser.save();
+        if (!email) {
+            return res.status(400).json({ status: "failed", message: "Email is required" });
+        }
 
-       
+        const otp = generateOTP();
+        otpStore[email] = { otp, expiresAt: Date.now() + 5 * 60 * 1000 };
 
-        // res.cookie('token', token, {
-        //     httpOnly: true,
-        //     secure: process.env.NODE_ENV === 'production', // Set to true in production
-        //     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // for cross-site
-        //     maxAge: 24 * 60 * 60 * 1000, // 1 days
-        //     path: '/',
+        // await sendEmail({
+        //     to: email,
+        //     subject: "Verify OTP",
+        //     html: `<h1>Your Login OTP</h1><p>${otp}</p>`
         // });
 
-        res.status(200).json({
-            message: "Login successful",
-            user: FindUser.email,
-            token: token
-        });
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
+        return res.json({ status: "success", message: "OTP sent to email", otp: otp });
 
-    }
-}
-const signup = async (req, res) => {
-    const { name, email, password, cnfPassword, role } = req.body;
-    try {
-        if (password !== cnfPassword) {
-            return res.status(400).json({ error: "Passwords do not match" });
-        }
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ error: "User already exists" });
-        }
-        const hashedPassword = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUNDS));
-        const newUser = new User({ name, email, role, password: hashedPassword });
-        await newUser.save();
-        res.status(201).json({ message: "User registered successfully" });
     } catch (error) {
-        return res.status(500).json({ error: error.message });
+        console.error("Send OTP Error:", error);
+        return res.status(500).json({ status: "failed", message: "Failed to send OTP" });
     }
-}
-const signout = async (req, res) => {
-    const token = req.cookies.token;
-    const userEmail = req.user.email;
-    // res.status(200).json({ message: "Signout successful", user: user });
+};
+
+
+
+const verifyOtp = async (req, res) => {
     try {
-        const FindUser = await User.findOne({ email: userEmail });
-        if (!FindUser) return res.status(404).json({ error: "User not found" });
-        FindUser.tokens = FindUser.tokens.filter(t => t.token !== token);
-        await FindUser.save();
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.status(400).json({ status: "failed", message: "Email and OTP required" });
+        }
+
+        const stored = otpStore[email];
+        if (!stored) {
+            return res.status(400).json({ status: "failed", message: "OTP expired or not sent" });
+        }
+
+        if (stored.otp !== otp) {
+            return res.status(400).json({ status: "failed", message: "Invalid OTP" });
+        }
+
+        if (stored.expiresAt < Date.now()) {
+            delete otpStore[email];
+            return res.status(400).json({ status: "failed", message: "OTP expired" });
+        }
+
+        delete otpStore[email];
+
+        // Check if user exists
+        let user = await Users.findOne({ email });
+
+        if (!user) {
+            // Create new user
+            user = await Users.create({
+                name: `user-${Date.now()}`,
+                email,
+                role: "user",
+                tokens: []
+            });
+        }
+
+        // Generate token
+        const token = jwt.sign(
+            { id: user._id, role: user.role, email: user.email },
+            process.env.JWT_SECRET,
+            { expiresIn: "1d" }
+        );
+
+        // Save token into user's token array
+        user.tokens.push(token);
+        await user.save();
+
+        res.json({
+            status: "success",
+            message: "OTP verified",
+            email,
+            token
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            status: "failed",
+            message: "Internal server error"
+        });
     }
-    res.clearCookie('token', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/', // Important: must match the path used when setting the cookie
-    });
-    res.status(200).json({ "response": "success", "type": "signout" });
-}
+};
+
 
 const checkAuth = async (req, res) => {
-
-
     const { email } = req.user;
     // res.status(200).json({ email });
     try {
-        const FindUser = await User.findOne({ email });
-        if (!FindUser) return res.status(404).json({ error: "User not found" });
+        const FindUser = await Users.findOne({ email });
+        if (!FindUser) return res.status(404).json({ status: "failed", message: "user not found", });
 
         res.status(200).json({
+            status:"success",
             message: "Authenticated",
             user: req.user.email // This will contain the decoded JWT payload
         });
@@ -97,6 +119,7 @@ const checkAuth = async (req, res) => {
     } catch (error) {
         res.status(500).json({ status: "failed", message: "error in user authentication" })
     }
-
 }
-module.exports = { signin, signup, checkAuth, signout }
+
+
+module.exports = { checkAuth, sendOtp, verifyOtp };

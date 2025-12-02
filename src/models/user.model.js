@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
     trim: true
   },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // hashed password
+  password: { type: String }, // hashed password
   role: {
     type: String,
     enum: ["user", "admin"],  // more roles can be added later

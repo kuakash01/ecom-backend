@@ -19,7 +19,7 @@ const uploadToCloudinary = (buffer, folder) => {
 };
 
 const addCategory = async (req, res) => {
-    const { name, description, parent } = req.body;
+    const { name, description, parent, slug } = req.body;
     const image = req.file;
 
     // res.status(200).json({status:"success", message:"ok", data: {...req.body, image}})
@@ -32,8 +32,10 @@ const addCategory = async (req, res) => {
             return res.status(400).json({ status: "failed", message: "Category already exists" });
         }
         const newCategory = new Categories({
-            name, description,
+            name,
+            description,
             parent: parent ? parent : null,
+            slug,
             image: {
                 url: imageResult.url,
                 public_id: imageResult.public_id
@@ -69,7 +71,7 @@ const getCategory = async (req, res) => {
 
 
 const editCategory = async (req, res) => {
-    const { name, description, parent } = req.body;
+    const { name, description, parent, slug } = req.body;
     const image = req.file;
 
     try {
@@ -96,6 +98,7 @@ const editCategory = async (req, res) => {
         // Update fields
         category.name = name;
         category.description = description;
+        category.slug = slug;
         category.parent = parent ? parent : category.parent;
 
         // Update image field only if new image uploaded
@@ -115,6 +118,7 @@ const editCategory = async (req, res) => {
         });
 
     } catch (error) {
+        console.log("Error:", error);
         res.status(500).json({
             status: "failed",
             message: "Internal Server Error",

@@ -11,6 +11,10 @@ const cartItemSchema = new mongoose.Schema({
         ref: "Product",
         required: true
     },
+    variant: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+    },
     quantity: {
         type: Number,
         required: true,
@@ -20,15 +24,15 @@ const cartItemSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
-    subTotal:{
+    subTotal: {
         type: Number,
         required: true
     },
-    user:{
+    user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true
     }
 },
-{ timestamps: true });
+    { timestamps: true });
 module.exports = mongoose.model("CartItem", cartItemSchema);

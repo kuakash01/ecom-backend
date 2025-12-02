@@ -15,9 +15,14 @@ const categorySchema = new mongoose.Schema({
         ref: 'Category',
         default: null
     },
+    slug: {
+        type: String,
+        required: true,
+        unique: true
+    },
     image: {
-        url: { type: String, required: true },
-        public_id: { type: String, required: true },
+        url: { type: String},
+        public_id: { type: String},
     },
 
 }, { timestamps: true });

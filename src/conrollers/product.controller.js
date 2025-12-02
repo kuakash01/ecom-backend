@@ -1,17 +1,315 @@
 // const mongoose = require('mongoose');
 const Product = require('../models/product.model'); // Product Model
 const Order = require('../models/order.model');
+const Category = require("../models/categories.model");
 
+const Color = require("../models/colors.model");
 
+// Find leaf categories of a given category
+const getLeafCategories = async (rootCategoryId) => {
+  const queue = [rootCategoryId];
+  const leafNodes = [];
 
+  while (queue.length) {
+    const current = queue.shift();
+    const children = await Category.find({ parent: current });
 
-const getAllProducts = async (req, res) => {
-  try {
-    const products = await Product.find({});
-    return res.status(200).json({ status: "success", message: "Products find successfully", data: products });
+    if (children.length === 0) {
+      // No children means this is a leaf
+      leafNodes.push(current);
+    } else {
+      // Push children for next iteration
+      children.forEach(child => queue.push(child._id));
+    }
   }
-  catch (err) {
-    return res.status(500).json({ status: "failed", message: "Products find successfully", error: err.message });
+  return leafNodes;
+};
+
+
+const getProducts = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    let finalProducts = []
+    // if slug is shop means all products
+    if (slug === "shop") {
+      const finalProducts = await Product.aggregate([
+        // Join category
+        {
+          $lookup: {
+            from: "categories",
+            localField: "category",
+            foreignField: "_id",
+            as: "category"
+          }
+        },
+        { $unwind: "$category" },
+
+        // Join COLOR for all variants
+        {
+          $lookup: {
+            from: "colors",
+            localField: "variants.color",
+            foreignField: "_id",
+            as: "colorDocs"
+          }
+        },
+
+        // Join SIZE for all variants
+        {
+          $lookup: {
+            from: "sizes",
+            localField: "variants.size",
+            foreignField: "_id",
+            as: "sizeDocs"
+          }
+        },
+
+        // Replace variant color/size IDs with actual docs
+        {
+          $addFields: {
+            variants: {
+              $map: {
+                input: "$variants",
+                as: "v",
+                in: {
+                  _id: "$$v._id",
+                  price: "$$v.price",
+                  mrp: "$$v.mrp",
+                  quantity: "$$v.quantity",
+                  color: {
+                    $first: {
+                      $filter: {
+                        input: "$colorDocs",
+                        as: "c",
+                        cond: { $eq: ["$$c._id", "$$v.color"] }
+                      }
+                    }
+                  },
+                  size: {
+                    $first: {
+                      $filter: {
+                        input: "$sizeDocs",
+                        as: "s",
+                        cond: { $eq: ["$$s._id", "$$v.size"] }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+
+        // Only in-stock variants
+        {
+          $addFields: {
+            validVariants: {
+              $filter: {
+                input: "$variants",
+                as: "v",
+                cond: { $gt: ["$$v.quantity", 0] }
+              }
+            }
+          }
+        },
+
+        // If no in-stock variant, drop whole product
+        { $match: { "validVariants.0": { $exists: true } } },
+
+        // Explode variants to sort by price
+        { $unwind: "$validVariants" },
+        { $sort: { "validVariants.price": 1 } },
+
+        // Pick cheapest variant per product
+        {
+          $group: {
+            _id: "$_id",
+            title: { $first: "$title" },
+            thumbnail: { $first: "$thumbnail" },
+            category: { $first: "$category.name" },
+            lowestVariant: { $first: "$validVariants" }
+          }
+        },
+
+        // Final structure for FE
+        {
+          $project: {
+            _id: 1,
+            title: 1,
+            thumbnail: 1,
+            category: 1,
+            price: "$lowestVariant.price",
+            mrp: "$lowestVariant.mrp",
+            color: "$lowestVariant.color.colorName",
+            size: "$lowestVariant.size.sizeName"
+          }
+        }
+      ]);
+
+      return res.status(200).json({
+        status: "success",
+        message: "Product fetch successfully",
+        products: finalProducts
+      });
+    }
+
+    // // check category is present in db
+    // const category = await Category.findOne({ slug });
+    // if (!category) return res.status(404).json({ status: "failed", message: 'Category not found' });
+
+    // // check for nested category
+    // const childCategory = await Category.find({ parent: category._id });
+
+    // if (childCategory.length) {
+    //   for (const item of childCategory) {
+    //     const products = await Product.find({ category: item._id });
+    //     for (const item of products)
+    //       finalProducts.push(item);
+    //   }
+    //   return res.status(200).json({ status: "success", message: "Products find successfully", products: finalProducts });
+    // }
+
+    // finalProducts = await Product.find({ category });
+    // res.status(200).json({ status: "success", message: "Products find successfully", products: finalProducts });
+
+    // get category by slug
+    const category = await Category.findOne({ slug });
+    if (!category) return res.status(404).json({ status: "failed", message: "Category not found" });
+
+    // // fetch child categories
+    // const childCategory = await Category.find({ parent: category._id });
+
+    // // build category array: if leaf -> only itself, else -> itself + children
+    // const categoryIds = childCategory.length
+    //   ? [category._id, ...childCategory.map(c => c._id)]
+    //   : [category._id];
+
+
+    const categoryIds = await getLeafCategories(category._id);
+
+    // console.log("categories id: ", categoryIds);
+
+    // aggregation to fetch products in desired output format
+    finalProducts = await Product.aggregate([
+      { $match: { category: { $in: categoryIds } } },
+
+      // Join category
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category"
+        }
+      },
+      { $unwind: "$category" },
+
+      // Join COLOR
+      {
+        $lookup: {
+          from: "colors",
+          localField: "variants.color",
+          foreignField: "_id",
+          as: "colorDocs"
+        }
+      },
+
+      // Join SIZE
+      {
+        $lookup: {
+          from: "sizes",
+          localField: "variants.size",
+          foreignField: "_id",
+          as: "sizeDocs"
+        }
+      },
+
+      // Attach color & size into each variant
+      {
+        $addFields: {
+          variants: {
+            $map: {
+              input: "$variants",
+              as: "v",
+              in: {
+                _id: "$$v._id",
+                price: "$$v.price",
+                mrp: "$$v.mrp",
+                quantity: "$$v.quantity",
+                color: {
+                  $first: {
+                    $filter: {
+                      input: "$colorDocs",
+                      as: "c",
+                      cond: { $eq: ["$$c._id", "$$v.color"] }
+                    }
+                  }
+                },
+                size: {
+                  $first: {
+                    $filter: {
+                      input: "$sizeDocs",
+                      as: "s",
+                      cond: { $eq: ["$$s._id", "$$v.size"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      // Only in-stock variants
+      {
+        $addFields: {
+          validVariants: {
+            $filter: {
+              input: "$variants",
+              as: "v",
+              cond: { $gt: ["$$v.quantity", 0] }
+            }
+          }
+        }
+      },
+      { $match: { "validVariants.0": { $exists: true } } },
+
+      // Pick lowest priced variant
+      { $unwind: "$validVariants" },
+      { $sort: { "validVariants.price": 1 } },
+      {
+        $group: {
+          _id: "$_id",
+          title: { $first: "$title" },
+          thumbnail: { $first: "$thumbnail" },
+          category: { $first: "$category.name" },
+          lowestVariant: { $first: "$validVariants" }
+        }
+      },
+
+      // Final structure
+      {
+        $project: {
+          _id: 1,
+          title: 1,
+          thumbnail: 1,
+          category: 1,
+          price: "$lowestVariant.price",
+          mrp: "$lowestVariant.mrp",
+          color: "$lowestVariant.color.colorName",
+          size: "$lowestVariant.size.sizeName"
+        }
+      }
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      message: "Products fetched successfully",
+      products: finalProducts
+    });
+
+  } catch (err) {
+    res.status(500).json({ status: "failed", message: "Internal server error", error: err.message });
   }
 }
 
@@ -50,7 +348,20 @@ const getProductDetails = async (req, res) => {
       product.defaultGallery = [];
     }
 
-    let allColors = product.colorGalleries.map(cg => ({ _id: cg.color._id.toString(), colorName: cg.color.colorName, colorHex: cg.color.colorHex }));
+    // let allColors = product.colorGalleries.map(cg => ({ _id: cg.color._id.toString(), colorName: cg.color.colorName, colorHex: cg.color.colorHex }));
+    const allColors = [
+      ...new Map(
+        product.variants.map(v => [
+          v.color._id,
+          {
+            _id: v.color._id,
+            colorName: v.color.colorName,
+            colorHex: v.color.colorHex
+          }
+        ])
+      ).values()
+    ];
+
 
     const responsePayload = {
       title: product.title,
@@ -240,4 +551,4 @@ const getColorGallery = async (req, res) => {
   }
 };
 
-module.exports = { getAllProducts, getProductDetails, getNewArrivals, getBestSeller, getColorGallery }
+module.exports = { getProducts, getProductDetails, getNewArrivals, getBestSeller, getColorGallery }
