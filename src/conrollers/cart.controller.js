@@ -189,58 +189,112 @@ const deleteItem = async (req, res) => {
     }
 }
 
-
 const getCartGuest = async (req, res) => {
-    try {
-        const { items } = req.body;
+  try {
 
-        const detailedItems = [];
+    const { items } = req.body;
 
-        for (const item of items) {
-            const product = await Product.findById(item.productId).lean();
-            if (!product) continue;
+    const detailedItems = [];
 
-            const variant = product.variants.find(v => v._id.toString() === item.variantId);
-            if (!variant) continue;
+    let cartSummary = {
+      subtotal: 0,
+      discount: 0,
+      deliveryCharge: 0,
+      total: 0,
+      finalTotal: 0
+    };
 
-            const variantGallery = product.colorGalleries.find(g => g.color.toString() === variant.color.toString()).gallery || [];
 
-            const variantColor = await Color.findById(variant.color);
-            const variantSize = await Size.findById(variant.size);
-            detailedItems.push({
-                productId: item.productId,
-                variantId: item.variantId,
+    for (const item of items) {
 
-                title: product.title,
-                mainImage: variantGallery[0].url || product.mainImage,
-                price: variant.price,
-                mrp: variant.mrp,
-                stock: variant.quantity,
+      const product = await Product.findById(item.productId).lean();
+      if (!product) continue;
 
-                attributes: {
-                    color: variantColor.colorHex,
-                    size: variantSize.sizeValue
-                },
+      const variant = product.variants.find(
+        v => v._id.toString() === item.variantId
+      );
+      if (!variant) continue;
 
-                quantity: item.quantity,
-                subtotal: variant.price * item.quantity
-            });
-        }
 
-        res.status(200).json({
-            status: "success",
-            message: "Guest cart fetched successfully",
-            data: {
-                cart: detailedItems,
-                cartSummary: null,
-            }
-        });
+      const variantGallery =
+        product.colorGalleries.find(
+          g => g.color.toString() === variant.color.toString()
+        )?.gallery || [];
 
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ status: "error", message: "Internal server error" });
+
+      const variantColor = await Color.findById(variant.color);
+      const variantSize = await Size.findById(variant.size);
+
+
+      const cartItem = {
+
+        productId: item.productId,
+        variantId: item.variantId,
+
+        title: product.title,
+        mainImage: variantGallery[0]?.url || product.mainImage,
+
+        price: variant.price,
+        mrp: variant.mrp,
+        stock: variant.quantity,
+
+        attributes: {
+          color: variantColor,
+          size: variantSize
+        },
+
+        quantity: item.quantity,
+      };
+
+
+      detailedItems.push(cartItem);
+
+
+      // SUMMARY CALCULATION (SAME AS USER CART)
+      cartSummary.subtotal += cartItem.mrp * cartItem.quantity;
+
+      cartSummary.total += cartItem.price * cartItem.quantity;
+
+      cartSummary.discount +=
+        (cartItem.mrp * cartItem.quantity) -
+        (cartItem.price * cartItem.quantity);
     }
+
+
+    // DELIVERY CHARGE
+    cartSummary.deliveryCharge =
+      await pricing.calculateDeliveryCharge(cartSummary.total);
+
+    cartSummary.finalTotal =
+      cartSummary.total + cartSummary.deliveryCharge;
+
+
+    detailedItems.reverse();
+
+
+    res.status(200).json({
+      status: "success",
+      message: "Guest cart fetched successfully",
+      data: {
+        cart: detailedItems,
+        cartSummary
+      }
+    });
+
+  } catch (error) {
+
+    console.error("Guest Cart Error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error"
+    });
+  }
 };
+
+
+
+
 
 const syncGuestCart = async (req, res) => {
     try {

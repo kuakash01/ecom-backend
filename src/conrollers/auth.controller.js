@@ -23,11 +23,143 @@ const sendOtp = async (req, res) => {
         const otp = generateOTP();
         otpStore[email] = { otp, expiresAt: Date.now() + 5 * 60 * 1000 };
 
-        // await sendEmail({
-        //     to: email,
-        //     subject: "Verify OTP",
-        //     html: `<h1>Your Login OTP</h1><p>${otp}</p>`
-        // });
+        await sendEmail({
+            to: email,
+            subject: "Verify OTP",
+            // html: `<h1>Your Login OTP</h1><p>${otp}</p>`
+            html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+  <title>OTP Verification</title>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f4f6f8;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      width: 100%;
+      padding: 30px 15px;
+      background-color: #f4f6f8;
+    }
+
+    .card {
+      max-width: 500px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 22px;
+      font-weight: bold;
+      color: #4f46e5;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #6b7280;
+      text-align: center;
+      margin-bottom: 25px;
+      line-height: 1.5;
+    }
+
+    .otp-box {
+      background: #f9fafb;
+      border: 2px dashed #4f46e5;
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: 6px;
+      color: #4f46e5;
+      margin-bottom: 25px;
+    }
+
+    .info {
+      font-size: 13px;
+      color: #6b7280;
+      text-align: center;
+      line-height: 1.5;
+      margin-bottom: 25px;
+    }
+
+    .footer {
+      border-top: 1px solid #e5e7eb;
+      padding-top: 15px;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    .brand {
+      font-weight: 600;
+      color: #4f46e5;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <div class="card">
+
+      <div class="logo">
+        🛍️ Ecom - Made by Akash Kumar
+      </div>
+
+      <div class="title">
+        Verify Your Login
+      </div>
+
+      <div class="subtitle">
+        Use the OTP below to securely sign in to your account.
+      </div>
+
+      <div class="otp-box">
+        ${otp}
+      </div>
+
+      <div class="info">
+        This OTP is valid for <strong>5 minutes</strong>.<br/>
+        Please do not share this code with anyone.
+      </div>
+
+      <div class="footer">
+        If you didn’t request this, you can safely ignore this email.<br/>
+        © ${new Date().getFullYear()} <span class="brand">YourStore</span>. All rights reserved.
+      </div>
+
+    </div>
+
+  </div>
+
+</body>
+</html>
+`
+
+        });
 
         return res.json({ status: "success", message: "OTP sent to email", otp: otp });
 
@@ -142,11 +274,12 @@ const checkAuth = async (req, res) => {
             email: req.user.email,
             role: req.user.role,
             profilePicture: FindUser.profilePicture,
+            cartCount
         }
         res.status(200).json({
             status: "success",
             message: "Authenticated",
-            data: { isAuthenticated, userData, cartCount } // This will contain the decoded JWT payload
+            data: { isAuthenticated, userData } // This will contain the decoded JWT payload
         });
 
 
