@@ -1,8 +1,8 @@
-const mongoose  = require('mongoose');
+const mongoose = require('mongoose');
 
 const addressSchema = new mongoose.Schema({
     user: {
-        type: mongoose.Schema.Types.ObjectId,   
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
     },
@@ -17,12 +17,22 @@ const addressSchema = new mongoose.Schema({
     },
     alternatePhone: {
         type: String,
-        match: [/^[0-9]{10}$/, 'Phone number must be 10 digits']
     },
-    street: {
+    addressLine1: {
         type: String,
         required: true
     },
+
+    addressLine2: {
+        type: String,
+        default: ""
+    },
+
+    landmark: {
+        type: String,
+        default: ""
+    },
+
     city: {
         type: String,
         required: true
@@ -41,6 +51,12 @@ const addressSchema = new mongoose.Schema({
         required: true,
         match: [/^\d{6}$/, 'Invalid Indian pincode'],
     },
+    addressType: {
+        type: String,
+        enum: ["home", "work", "other"],
+        default: "home",
+    },
+
     isDefault: {
         type: Boolean,
         default: false

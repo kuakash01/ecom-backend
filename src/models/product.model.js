@@ -34,7 +34,18 @@ const productSchema = new mongoose.Schema(
         mrp: { type: Number, required: true },
         quantity: { type: Number, default: 0 },
         sku: { type: String, },
-
+        gstRate: {
+          type: Number,
+          required: true
+        },
+        basePrice: {
+          type: Number,
+          required: true
+        },
+        gstAmount: {  
+          type: Number,
+          required: true
+        }
       }
     ],
     // Color-wise gallery

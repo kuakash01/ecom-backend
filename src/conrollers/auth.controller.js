@@ -1,6 +1,8 @@
 const sendEmail = require("../config/nodemailer");
 const Users = require("../models/user.model");
 const jwt = require("jsonwebtoken");
+const Cart = require("../models/cart.model");
+const CartItem = require("../models/cartItem.model");
 
 
 const otpStore = {};
@@ -69,7 +71,7 @@ const verifyOtp = async (req, res) => {
             user = await Users.create({
                 name: `user-${Date.now()}`,
                 email,
-                role: "user",
+                role: "customer",
                 tokens: []
             });
         }
@@ -106,20 +108,64 @@ const checkAuth = async (req, res) => {
     const { email } = req.user;
     // res.status(200).json({ email });
     try {
+        let isAuthenticated = false;
         const FindUser = await Users.findOne({ email });
         if (!FindUser) return res.status(404).json({ status: "failed", message: "user not found", });
 
+        // Find cart
+        const cart = await Cart.findOne({ user: FindUser._id });
+
+        let cartCount = 0;
+
+
+        // If cart exists → count items
+        if (cart) {
+
+            const result = await CartItem.aggregate([
+                {
+                    $match: { cart: cart._id }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalQty: { $sum: "$quantity" }
+                    }
+                }
+            ]);
+
+            cartCount = result[0]?.totalQty || 0;
+        }
+
+
+        isAuthenticated = true;
+        let userData = {
+            email: req.user.email,
+            role: req.user.role,
+            profilePicture: FindUser.profilePicture,
+        }
         res.status(200).json({
-            status:"success",
+            status: "success",
             message: "Authenticated",
-            user: req.user.email // This will contain the decoded JWT payload
+            data: { isAuthenticated, userData, cartCount } // This will contain the decoded JWT payload
         });
 
 
     } catch (error) {
+        console.error("Error in checkAuth:", error);
         res.status(500).json({ status: "failed", message: "error in user authentication" })
     }
 }
 
+const logout = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const token = req.token;
+        await Users.findByIdAndUpdate(userId, { $pull: { tokens: token } });
+        res.status(200).json({ status: "success", message: "Logged out successfully" });
+    } catch (err) {
+        res.status(500).json({ status: "failed", message: "Server Error", error: err.message });
+    }
+}
 
-module.exports = { checkAuth, sendOtp, verifyOtp };
+
+module.exports = { checkAuth, sendOtp, verifyOtp, logout };

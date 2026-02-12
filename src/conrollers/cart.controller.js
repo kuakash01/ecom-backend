@@ -3,6 +3,7 @@ const CartItem = require('../models/cartItem.model');
 const Product = require('../models/product.model');
 const Size = require("../models/size.model");
 const Color = require("../models/colors.model");
+const pricing = require('../utils/pricing');
 
 
 const addCartItem = async (req, res) => {
@@ -33,7 +34,6 @@ const addCartItem = async (req, res) => {
         const existingCartItem = await CartItem.findOne({ cart: cart._id, product: productId, variant: variantId });
         if (existingCartItem) {
             existingCartItem.quantity += quantity;
-            existingCartItem.subTotal = variant.price * existingCartItem.quantity;
             await existingCartItem.save();
             return res.status(200).json({ status: "success", message: "Product Added successfully", existingCartItem: true });
         }
@@ -43,8 +43,6 @@ const addCartItem = async (req, res) => {
             product: productId,
             variant: variantId,
             quantity: quantity,
-            price: variant.price,
-            subTotal: variant.price * quantity,
             user: id
         });
 
@@ -62,13 +60,20 @@ const addCartItem = async (req, res) => {
 const getCart = async (req, res) => {
     const { id } = req.user;
     try {
-        let cart = await Cart.findOne({ user: id }).populate("items", "_id product variant quantity");
+        let cart = await Cart.findOne({ user: id }).populate("items", "_id product variant quantity price mrp");
 
         if (!cart) {
             res.status(404).json({ status: "failed", message: "Cart not found" });
         }
 
         const detailedItems = [];
+        let cartSummary = {
+            subtotal: 0,
+            discount: 0,
+            deliveryCharge: 0,
+            total: 0,
+            finalTotal: 0
+        }
 
         for (const item of cart.items) {
             const product = await Product.findById(item.product);
@@ -81,7 +86,7 @@ const getCart = async (req, res) => {
 
             const variantColor = await Color.findById(variant.color);
             const variantSize = await Size.findById(variant.size);
-            detailedItems.push({
+            let cartItem = {
                 _id: item._id,
                 productId: product._id,
                 variantId: variant._id,
@@ -98,9 +103,17 @@ const getCart = async (req, res) => {
                 },
 
                 quantity: item.quantity,
-                subtotal: variant.price * item.quantity
-            });
+            }
+            detailedItems.push(cartItem);
+            cartSummary.subtotal += cartItem.mrp * cartItem.quantity;
+            cartSummary.total += cartItem.price * cartItem.quantity;
+            cartSummary.discount += (cartItem.mrp * cartItem.quantity) - (cartItem.price * cartItem.quantity);
         }
+
+        cartSummary.deliveryCharge = await pricing.calculateDeliveryCharge(cartSummary.total);
+        cartSummary.finalTotal = cartSummary.total + cartSummary.deliveryCharge;
+
+
 
         detailedItems.reverse();
 
@@ -109,7 +122,7 @@ const getCart = async (req, res) => {
             message: "Cart fetched successfully",
             data: {
                 cart: detailedItems,
-                cartSummary: null
+                cartSummary,
             },
 
         });
@@ -238,40 +251,39 @@ const syncGuestCart = async (req, res) => {
         let cart = await Cart.findOne({ user: id });
         if (!cart) {
             cart = await Cart.create({ user: id, items: [] });
-        }
+
+            for (const item of items) {
+                const product = await Product.findById(item.productId).lean();
+                if (!product) continue;
+
+                const variant = product.variants.find(v => v._id.toString() === item.variantId.toString());
+                if (!variant) continue;
 
 
-        for (const item of items) {
-            const product = await Product.findById(item.productId).lean();
-            if (!product) continue;
+                const existingCartItem = await CartItem.findOne({ cart: cart._id, product: item.productId, variant: item.variantId });
+                if (existingCartItem) {
+                    existingCartItem.quantity += item.quantity;
+                    existingCartItem.subTotal = variant.price * existingCartItem.quantity;
+                    await existingCartItem.save();
+                    return res.status(200).json({ status: "success", message: "Local cart sync to user successfully", existing: true });
+                }
 
-            const variant = product.variants.find(v => v._id.toString() === item.variantId.toString());
-            if (!variant) continue;
 
 
-            const existingCartItem = await CartItem.findOne({ cart: cart._id, product: item.productId, variant: item.variantId });
-            if (existingCartItem) {
-                existingCartItem.quantity += item.quantity;
-                existingCartItem.subTotal = variant.price * existingCartItem.quantity;
-                await existingCartItem.save();
-                return res.status(200).json({ status: "success", message: "Local cart sync to user successfully", existing: true });
+                const cartItem = await CartItem.create({
+                    cart: cart._id,
+                    product: item.productId,
+                    variant: item.variantId,
+                    quantity: item.quantity,
+                    price: variant.price,
+                    subTotal: variant.price * item.quantity,
+                    user: id
+                });
+
+                cart.items.push(cartItem._id);
+                await cart.save();
+
             }
-
-
-
-            const cartItem = await CartItem.create({
-                cart: cart._id,
-                product: item.productId,
-                variant: item.variantId,
-                quantity: item.quantity,
-                price: variant.price,
-                subTotal: variant.price * item.quantity,
-                user: id
-            });
-
-            cart.items.push(cartItem._id);
-            await cart.save();
-
         }
 
         res.status(200).json({ status: "success", message: "Local cart sync to user successfully", existing: false });

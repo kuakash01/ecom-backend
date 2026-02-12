@@ -7,9 +7,11 @@ router.use("/auth", require("./auth.routes"));
 router.use('/products', require('./products.routes'));
 router.use('/categories', require('./categories.routes'));
 router.use('/cart', require('./cart.routes'));
+router.use('/checkout', require('./checkout.routes'));
 router.use('/address', require('./address.routes'));
 router.use('/orders', require('./order.routes'));
 router.use('/carousel', require('./carousel.routes'));
+router.use('/user', require('./user.routes'));
 
 
 
