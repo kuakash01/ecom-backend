@@ -1,4 +1,4 @@
-const sendEmail = require("../config/nodemailer");
+const sendEmail = require("../config/mailer");
 const Users = require("../models/user.model");
 const jwt = require("jsonwebtoken");
 const Cart = require("../models/cart.model");
@@ -27,7 +27,7 @@ const sendOtp = async (req, res) => {
 
     res.json({ status: "success", message: "OTP sent to email", otp: otp });
 
-    await sendEmail({
+    sendEmail({
       to: email,
       subject: "Verify OTP",
       // html: `<h1>Your Login OTP</h1><p>${otp}</p>`
@@ -163,7 +163,8 @@ const sendOtp = async (req, res) => {
 </html>
 `
 
-    });
+    }).catch(err => console.log("Mail failed:", err));
+
   } catch (error) {
     console.error("Send OTP Error:", error);
     return res.status(500).json({ status: "failed", message: "Failed to send OTP" });
