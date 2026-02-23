@@ -5,6 +5,8 @@ const Size = require("../models/size.model");
 const Color = require("../models/colors.model");
 const pricing = require('../utils/pricing');
 
+
+
 const checkoutPreview = async (req, res) => {
     const { id } = req.user;
     const { type, productId, variantId, buyNowQty } = req.body; // 'CART' or 'BUY_NOW'

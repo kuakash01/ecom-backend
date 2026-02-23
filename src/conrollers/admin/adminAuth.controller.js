@@ -3,44 +3,102 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 
+// const signin = async (req, res) => {
+//     const { email, password } = req.body;
+//     try {
+//         const FindUser = await User.findOne({ email });
+//         if (!FindUser) return res.status(404).json({ error: "User not found" });
+//         const isMatch = await FindUser.comparePassword(password);
+//         if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
+
+//         // Generate JWT or session token here
+//         const token = jwt.sign(
+//             { id: FindUser._id, role: FindUser.role, email: FindUser.email },
+//             process.env.JWT_SECRET,
+//             { expiresIn: '1d' }
+//         );
+//         FindUser.tokens.push({ token });
+//         await FindUser.save();
+
+
+
+//         // res.cookie('token', token, {
+//         //     httpOnly: true,
+//         //     secure: process.env.NODE_ENV === 'production', // Set to true in production
+//         //     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // for cross-site
+//         //     maxAge: 24 * 60 * 60 * 1000, // 1 days
+//         //     path: '/',
+//         // });
+
+//         res.status(200).json({
+//             status:"success",
+//             message: "Login successful",
+//             user: FindUser.email,
+//             token: token
+//         });
+//     } catch (error) {
+//         return res.status(500).json({ error: error.message });
+
+//     }
+// }
+
 const signin = async (req, res) => {
     const { email, password } = req.body;
+
     try {
-        const FindUser = await User.findOne({ email });
-        if (!FindUser) return res.status(404).json({ error: "User not found" });
-        const isMatch = await FindUser.comparePassword(password);
-        if (!isMatch) return res.status(400).json({ error: "Invalid credentials" });
+        const user = await User.findOne({ email, role: "admin" }); // Only allow admin login
 
-        // Generate JWT or session token here
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        const isMatch = await user.comparePassword(password);
+
+        if (!isMatch) {
+            return res.status(400).json({ error: "Invalid credentials" });
+        }
+
+        /* ===============================
+           🔒 REMOVE ALL OLD TOKENS
+           =============================== */
+
+        user.tokens = []; // ❗ logout from everywhere
+
+        /* ===============================
+           🔐 CREATE NEW TOKEN
+           =============================== */
+
         const token = jwt.sign(
-            { id: FindUser._id, role: FindUser.role, email: FindUser.email },
+            {
+                id: user._id,
+                role: user.role,
+                email: user.email
+            },
             process.env.JWT_SECRET,
-            { expiresIn: '1d' }
+            { expiresIn: "1d" }
         );
-        FindUser.tokens.push({ token });
-        await FindUser.save();
 
-       
+        // Store as STRING
+        user.tokens.push(token);
 
-        // res.cookie('token', token, {
-        //     httpOnly: true,
-        //     secure: process.env.NODE_ENV === 'production', // Set to true in production
-        //     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // for cross-site
-        //     maxAge: 24 * 60 * 60 * 1000, // 1 days
-        //     path: '/',
-        // });
+        await user.save();
 
         res.status(200).json({
-            status:"success",
+            status: "success",
             message: "Login successful",
-            user: FindUser.email,
-            token: token
+            user: user.email,
+            token
         });
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
 
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            error: "Internal server error"
+        });
     }
-}
+};
+
 const signup = async (req, res) => {
     const { name, email, password, cnfPassword, role } = req.body;
     try {

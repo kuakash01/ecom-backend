@@ -54,30 +54,51 @@ const addColor = async (req, res) => {
 };
 
 
+// const getAllColors = async (req, res) => {
+//     try {
+//         const colors = await Colors.find();
+
+//         if (!colors || colors.length === 0) {
+//             return res.status(404).json({
+//                 status: "failed",
+//                 message: "No colors found"
+//             });
+//         }
+
+//         res.status(200).json({
+//             status: "success",
+//             message: "Colors fetched successfully",
+//             data: colors
+//         });
+
+//     } catch (error) {
+//         res.status(500).json({
+//             status: "failed",
+//             message: "Internal server error"
+//         });
+//     }
+// };
+
 const getAllColors = async (req, res) => {
-    try {
-        const colors = await Colors.find();
+  try {
+    const colors = await Colors.find().sort({ createdAt: -1 });
 
-        if (!colors || colors.length === 0) {
-            return res.status(404).json({
-                status: "failed",
-                message: "No colors found"
-            });
-        }
+    res.status(200).json({
+      status: "success",
+      message: "Colors fetched successfully",
+      data: colors || []
+    });
 
-        res.status(200).json({
-            status: "success",
-            message: "Colors fetched successfully",
-            data: colors
-        });
+  } catch (error) {
+    console.error("Get Colors Error:", error);
 
-    } catch (error) {
-        res.status(500).json({
-            status: "failed",
-            message: "Internal server error"
-        });
-    }
+    res.status(500).json({
+      status: "failed",
+      message: "Internal server error"
+    });
+  }
 };
+
 
 
 

@@ -80,10 +80,20 @@ const getCarousel = async (req, res) => {
 
 const addCarouselImage = async (req, res) => {
   try {
-    let { position } = req.body;
-    const image = req.file;
+    let { position, redirectType, redirectValue } = req.body;
+    const image = req.files?.desktopImage?.[0]; // Access desktop image from the uploaded files
+    const mobileImage = req.files?.mobileImage?.[0]; // Access mobile image from the uploaded files
+
+    if (!image) {
+      return res.status(400).json({ status: "failed", message: "Desktop image is required" });
+    }
+    if (!mobileImage) {
+      return res.status(400).json({ status: "failed", message: "Mobile image is required" });
+    }
+
 
     const imageResult = await uploadToCloudinary(image.buffer, "carousel");
+    const mobileImageResult = await uploadToCloudinary(mobileImage.buffer, "carousel");
 
     // If no position provided, get the last position + 1
     if (!position) {
@@ -95,10 +105,16 @@ const addCarouselImage = async (req, res) => {
     const tempPos = 999999;
     const newImage = await carouselImage.create({
       position: tempPos,
-      image: {
+      desktopImage: {
         url: imageResult.secure_url,
         public_id: imageResult.public_id
-      }
+      },
+      mobileImage: {
+        url: mobileImageResult.secure_url,
+        public_id: mobileImageResult.public_id
+      },
+      redirectType,
+      redirectValue
     });
 
     // Step 2: Shift existing items only if position falls inside range
@@ -294,4 +310,90 @@ const deleteCarouselImage = async (req, res) => {
   }
 }
 
-module.exports = { getCarousel, addCarouselImage, updateImageStatus, updatePosition, deleteCarouselImage };
+
+// controllers/carouselController.js
+
+const updateRedirectType = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { redirectType } = req.body;
+
+    if (!redirectType) {
+      return res.status(400).json({
+        status: "error",
+        message: "Redirect type is required",
+      });
+    }
+
+    const updated = await carouselImage.findByIdAndUpdate(
+      id,
+      { redirectType },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({
+        status: "error",
+        message: "Carousel not found",
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Redirect type updated",
+      data: updated,
+    });
+
+  } catch (error) {
+    console.error("Update Redirect Type Error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Server error",
+    });
+  }
+};
+
+
+const updateRedirectValue = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { redirectValue } = req.body;
+
+    if (!redirectValue) {
+      return res.status(400).json({
+        status: "error",
+        message: "Redirect value is required",
+      });
+    }
+
+    const updated = await carouselImage.findByIdAndUpdate(
+      id,
+      { redirectValue },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({
+        status: "error",
+        message: "Carousel not found",
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Redirect value updated",
+      data: updated,
+    });
+
+  } catch (error) {
+    console.error("Update Redirect Value Error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Server error",
+    });
+  }
+};
+
+module.exports = { getCarousel, addCarouselImage, updateImageStatus, updatePosition, deleteCarouselImage, updateRedirectType, updateRedirectValue };

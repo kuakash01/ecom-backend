@@ -173,35 +173,113 @@ const sendOtp = async (req, res) => {
 
 
 
+// const verifyOtp = async (req, res) => {
+//   try {
+//     const { email, otp } = req.body;
+
+//     if (!email || !otp) {
+//       return res.status(400).json({ status: "failed", message: "Email and OTP required" });
+//     }
+
+//     const stored = otpStore[email];
+//     if (!stored) {
+//       return res.status(400).json({ status: "failed", message: "OTP expired or not sent" });
+//     }
+
+//     if (stored.otp !== otp) {
+//       return res.status(400).json({ status: "failed", message: "Invalid OTP" });
+//     }
+
+//     if (stored.expiresAt < Date.now()) {
+//       delete otpStore[email];
+//       return res.status(400).json({ status: "failed", message: "OTP expired" });
+//     }
+
+//     delete otpStore[email];
+
+//     // Check if user exists
+//     let user = await Users.findOne({ email });
+
+//     if (!user) {
+//       // Create new user
+//       user = await Users.create({
+//         name: `user-${Date.now()}`,
+//         email,
+//         role: "customer",
+//         tokens: []
+//       });
+//     }
+
+//     // Generate token
+//     const token = jwt.sign(
+//       { id: user._id, role: user.role, email: user.email },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "1d" }
+//     );
+
+//     // Save token into user's token array
+//     user.tokens.push(token);
+//     await user.save();
+
+//     res.json({
+//       status: "success",
+//       message: "OTP verified",
+//       email,
+//       token
+//     });
+
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({
+//       status: "failed",
+//       message: "Internal server error"
+//     });
+//   }
+// };
+
 const verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
     if (!email || !otp) {
-      return res.status(400).json({ status: "failed", message: "Email and OTP required" });
+      return res.status(400).json({
+        status: "failed",
+        message: "Email and OTP required"
+      });
     }
 
     const stored = otpStore[email];
+
     if (!stored) {
-      return res.status(400).json({ status: "failed", message: "OTP expired or not sent" });
+      return res.status(400).json({
+        status: "failed",
+        message: "OTP expired or not sent"
+      });
     }
 
     if (stored.otp !== otp) {
-      return res.status(400).json({ status: "failed", message: "Invalid OTP" });
+      return res.status(400).json({
+        status: "failed",
+        message: "Invalid OTP"
+      });
     }
 
     if (stored.expiresAt < Date.now()) {
       delete otpStore[email];
-      return res.status(400).json({ status: "failed", message: "OTP expired" });
+      return res.status(400).json({
+        status: "failed",
+        message: "OTP expired"
+      });
     }
 
+    // Remove OTP
     delete otpStore[email];
 
-    // Check if user exists
+    // Find user
     let user = await Users.findOne({ email });
 
+    // Create user if not exists
     if (!user) {
-      // Create new user
       user = await Users.create({
         name: `user-${Date.now()}`,
         email,
@@ -210,33 +288,60 @@ const verifyOtp = async (req, res) => {
       });
     }
 
-    // Generate token
-    const token = jwt.sign(
-      { id: user._id, role: user.role, email: user.email },
+    /* ===============================
+       🧹 CLEAN EXPIRED TOKENS HERE
+       =============================== */
+
+    const originalLength = user.tokens.length;
+
+    user.tokens = user.tokens.filter(token => {
+      try {
+        jwt.verify(token, process.env.JWT_SECRET);
+        return true; // keep valid
+      } catch {
+        return false; // remove expired
+      }
+    });
+
+    // Save only if something removed
+    if (user.tokens.length !== originalLength) {
+      await user.save();
+    }
+
+    /* ===============================
+       🔐 CREATE NEW TOKEN
+       =============================== */
+
+    const newToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+        email: user.email
+      },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
 
-    // Save token into user's token array
-    user.tokens.push(token);
+    // Store token
+    user.tokens.push(newToken);
     await user.save();
 
     res.json({
       status: "success",
       message: "OTP verified",
       email,
-      token
+      token: newToken
     });
 
   } catch (err) {
     console.error(err);
+
     res.status(500).json({
       status: "failed",
       message: "Internal server error"
     });
   }
 };
-
 
 const checkAuth = async (req, res) => {
   const { email } = req.user;
@@ -291,16 +396,16 @@ const checkAuth = async (req, res) => {
   }
 }
 
-const logout = async (req, res) => {
+const signout = async (req, res) => {
   try {
     const userId = req.user.id;
     const token = req.token;
     await Users.findByIdAndUpdate(userId, { $pull: { tokens: token } });
-    res.status(200).json({ status: "success", message: "Logged out successfully" });
+    res.status(200).json({ status: "success", message: "Logged out successfully", data: { isAuthentcated: false, userData: null } });
   } catch (err) {
     res.status(500).json({ status: "failed", message: "Server Error", error: err.message });
   }
 }
 
 
-module.exports = { checkAuth, sendOtp, verifyOtp, logout };
+module.exports = { checkAuth, sendOtp, verifyOtp, signout };

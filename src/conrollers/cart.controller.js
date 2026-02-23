@@ -6,10 +6,35 @@ const Color = require("../models/colors.model");
 const pricing = require('../utils/pricing');
 
 
+let getCartCount = async (cart) => {
+    // calculate cart count 
+    let cartCount = 0;
+    // If cart exists → count items
+    if (cart) {
+
+        const result = await CartItem.aggregate([
+            {
+                $match: { cart: cart._id }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalQty: { $sum: "$quantity" }
+                }
+            }
+        ]);
+
+        cartCount = result[0]?.totalQty || 0;
+    }
+    return cartCount
+}
+
+
 const addCartItem = async (req, res) => {
     try {
         const { id } = req.user;
         const { productId, variantId, quantity } = req.body;
+        let cartCount = 0;
 
         // Find or create cart
         let cart = await Cart.findOne({ user: id });
@@ -35,7 +60,8 @@ const addCartItem = async (req, res) => {
         if (existingCartItem) {
             existingCartItem.quantity += quantity;
             await existingCartItem.save();
-            return res.status(200).json({ status: "success", message: "Product Added successfully", existingCartItem: true });
+            cartCount = await getCartCount(cart)
+            return res.status(200).json({ status: "success", message: "Product Added successfully", data: { existingCartItem: false, cartCount } });
         }
 
         const cartItem = await CartItem.create({
@@ -49,7 +75,9 @@ const addCartItem = async (req, res) => {
         cart.items.push(cartItem._id);
         await cart.save();
 
-        res.status(201).json({ status: "success", message: "Product Added successfully", existingCartItem: false });
+        cartCount = await getCartCount(cart)
+
+        res.status(201).json({ status: "success", message: "Product Added successfully", data: { existingCartItem: false, cartCount } });
     } catch (err) {
         console.log("error", err);
         return res.status(500).json({ status: "failed", message: "Server error" });
@@ -137,7 +165,7 @@ const updateCartItem = async (req, res) => {
         const { quantity, type } = req.body;
         const itemId = req.params.itemId;
 
-        let cart = await Cart.findOne({ user: id }).populate({ path: 'items', populate: { path: 'product' } });
+        let cart = await Cart.findOne({ user: id }).populate({ path: 'items', populate: { path: 'product' } }).lean();
         if (!cart) {
             return res.status(404).json({ status: "failed", message: "Cart not found" });
         }
@@ -154,8 +182,15 @@ const updateCartItem = async (req, res) => {
         } else {
             cartItem.quantity = quantity;
         }
-        cartItem.subTotal = cartItem.price * cartItem.quantity;
-        await cartItem.save();
+        // Prevent negative quantity
+        if (cartItem.quantity < 1) {
+            await cartItem.deleteOne();
+        } else {
+            await cartItem.save();
+        }
+
+        let cartCount = await getCartCount(cart);
+        cart.cartCount = cartCount;
 
         res.status(200).json({
             status: "success",
@@ -190,106 +225,106 @@ const deleteItem = async (req, res) => {
 }
 
 const getCartGuest = async (req, res) => {
-  try {
+    try {
 
-    const { items } = req.body;
+        const { items } = req.body;
 
-    const detailedItems = [];
+        const detailedItems = [];
 
-    let cartSummary = {
-      subtotal: 0,
-      discount: 0,
-      deliveryCharge: 0,
-      total: 0,
-      finalTotal: 0
-    };
-
-
-    for (const item of items) {
-
-      const product = await Product.findById(item.productId).lean();
-      if (!product) continue;
-
-      const variant = product.variants.find(
-        v => v._id.toString() === item.variantId
-      );
-      if (!variant) continue;
+        let cartSummary = {
+            subtotal: 0,
+            discount: 0,
+            deliveryCharge: 0,
+            total: 0,
+            finalTotal: 0
+        };
 
 
-      const variantGallery =
-        product.colorGalleries.find(
-          g => g.color.toString() === variant.color.toString()
-        )?.gallery || [];
+        for (const item of items) {
+
+            const product = await Product.findById(item.productId).lean();
+            if (!product) continue;
+
+            const variant = product.variants.find(
+                v => v._id.toString() === item.variantId
+            );
+            if (!variant) continue;
 
 
-      const variantColor = await Color.findById(variant.color);
-      const variantSize = await Size.findById(variant.size);
+            const variantGallery =
+                product.colorGalleries.find(
+                    g => g.color.toString() === variant.color.toString()
+                )?.gallery || [];
 
 
-      const cartItem = {
-
-        productId: item.productId,
-        variantId: item.variantId,
-
-        title: product.title,
-        mainImage: variantGallery[0]?.url || product.mainImage,
-
-        price: variant.price,
-        mrp: variant.mrp,
-        stock: variant.quantity,
-
-        attributes: {
-          color: variantColor,
-          size: variantSize
-        },
-
-        quantity: item.quantity,
-      };
+            const variantColor = await Color.findById(variant.color);
+            const variantSize = await Size.findById(variant.size);
 
 
-      detailedItems.push(cartItem);
+            const cartItem = {
+
+                productId: item.productId,
+                variantId: item.variantId,
+
+                title: product.title,
+                mainImage: variantGallery[0]?.url || product.mainImage,
+
+                price: variant.price,
+                mrp: variant.mrp,
+                stock: variant.quantity,
+
+                attributes: {
+                    color: variantColor,
+                    size: variantSize
+                },
+
+                quantity: item.quantity,
+            };
 
 
-      // SUMMARY CALCULATION (SAME AS USER CART)
-      cartSummary.subtotal += cartItem.mrp * cartItem.quantity;
+            detailedItems.push(cartItem);
 
-      cartSummary.total += cartItem.price * cartItem.quantity;
 
-      cartSummary.discount +=
-        (cartItem.mrp * cartItem.quantity) -
-        (cartItem.price * cartItem.quantity);
+            // SUMMARY CALCULATION (SAME AS USER CART)
+            cartSummary.subtotal += cartItem.mrp * cartItem.quantity;
+
+            cartSummary.total += cartItem.price * cartItem.quantity;
+
+            cartSummary.discount +=
+                (cartItem.mrp * cartItem.quantity) -
+                (cartItem.price * cartItem.quantity);
+        }
+
+
+        // DELIVERY CHARGE
+        cartSummary.deliveryCharge =
+            await pricing.calculateDeliveryCharge(cartSummary.total);
+
+        cartSummary.finalTotal =
+            cartSummary.total + cartSummary.deliveryCharge;
+
+
+        detailedItems.reverse();
+
+
+        res.status(200).json({
+            status: "success",
+            message: "Guest cart fetched successfully",
+            data: {
+                cart: detailedItems,
+                cartSummary
+            }
+        });
+
+    } catch (error) {
+
+        console.error("Guest Cart Error:", error);
+
+        res.status(500).json({
+            status: "error",
+            message: "Internal server error"
+        });
     }
-
-
-    // DELIVERY CHARGE
-    cartSummary.deliveryCharge =
-      await pricing.calculateDeliveryCharge(cartSummary.total);
-
-    cartSummary.finalTotal =
-      cartSummary.total + cartSummary.deliveryCharge;
-
-
-    detailedItems.reverse();
-
-
-    res.status(200).json({
-      status: "success",
-      message: "Guest cart fetched successfully",
-      data: {
-        cart: detailedItems,
-        cartSummary
-      }
-    });
-
-  } catch (error) {
-
-    console.error("Guest Cart Error:", error);
-
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error"
-    });
-  }
 };
 
 
@@ -317,7 +352,6 @@ const syncGuestCart = async (req, res) => {
                 const existingCartItem = await CartItem.findOne({ cart: cart._id, product: item.productId, variant: item.variantId });
                 if (existingCartItem) {
                     existingCartItem.quantity += item.quantity;
-                    existingCartItem.subTotal = variant.price * existingCartItem.quantity;
                     await existingCartItem.save();
                     return res.status(200).json({ status: "success", message: "Local cart sync to user successfully", existing: true });
                 }
@@ -330,7 +364,6 @@ const syncGuestCart = async (req, res) => {
                     variant: item.variantId,
                     quantity: item.quantity,
                     price: variant.price,
-                    subTotal: variant.price * item.quantity,
                     user: id
                 });
 
@@ -347,6 +380,5 @@ const syncGuestCart = async (req, res) => {
         res.status(500).json({ status: "failed", message: "Internal server error" });
     }
 }
-
 
 module.exports = { addCartItem, getCart, updateCartItem, deleteItem, getCartGuest, syncGuestCart };

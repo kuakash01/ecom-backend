@@ -2,8 +2,22 @@
 const Product = require('../../models/product.model'); // Product Model
 const cloudinary = require('../../config/cloudinary');
 const streamifier = require('streamifier');
+const Tax = require("../../models/tax.model");
 
 
+// helper functions
+const getTaxForPrice = (price, taxes) => {
+  return taxes.find(tax => {
+    const min = tax.minPrice || 0;
+    const max = tax.maxPrice;
+
+    if (max === null) {
+      return price >= min;
+    }
+
+    return price >= min && price <= max;
+  });
+};
 
 
 const uploadToCloudinary = (buffer, folder) => {
@@ -195,7 +209,12 @@ const addProduct = async (req, res) => {
       return res.status(400).json({ message: "Variations are required" });
     }
 
+
+
     const parsedVariations = JSON.parse(variations);
+
+    const activeTaxes = await Tax.find({ isActive: true });
+
 
     // Create variants array without gallery
     let count = 1;
@@ -205,6 +224,24 @@ const addProduct = async (req, res) => {
       const sku = `${colorCode}-${sizeCode}-${count}`;
       count++;
 
+
+      // 🔍 Find tax slab based on MRP (or price)
+      const tax = getTaxForPrice(v.price, activeTaxes);
+
+      let gstRate = 0;
+      let basePrice = v.price;
+      let gstAmount = 0;
+
+      if (tax) {
+        gstRate = tax.rate;
+
+        basePrice = (v.price * 100) / (100 + gstRate);
+        basePrice = Number(basePrice.toFixed(2));
+
+        gstAmount = Number((v.price - basePrice).toFixed(2));
+      }
+
+
       return {
         color: v.color,
         size: v.size,
@@ -212,13 +249,16 @@ const addProduct = async (req, res) => {
         mrp: v.mrp,
         quantity: v.quantity,
         sku,
+        gstRate,
+        basePrice,
+        gstAmount
       };
     });
 
     // ---------------- 3️⃣ Save Product ----------------
     const newProduct = await Product.create({
       title,
-      description,
+      description: description ? description : "",
       category,
       thumbnail,
       variants,
@@ -442,6 +482,113 @@ const getProductVariations = async (req, res) => {
   }
 };
 
+// POST /admin/products/:id/variants
+const addVariant = async (req, res) => {
+  try {
+    const { color, size, price, mrp, quantity } = req.body;
+
+    if (!color || !size || !price || !mrp || !quantity) {
+      return res.status(400).json({
+        message: "All fields are required"
+      });
+    }
+
+    const product = await Product.findById(req.params.productId);
+
+    if (!product) {
+      return res.status(404).json({
+        message: "Product not found"
+      });
+    }
+
+    /* ----------------- DUPLICATE CHECK ----------------- */
+
+    const exists = product.variants.find(
+      v =>
+        v.color.toString() === color &&
+        v.size.toString() === size &&
+        v.isActive !== false
+    );
+
+    if (exists) {
+      return res.status(400).json({
+        message: "This color-size already exists"
+      });
+    }
+
+    /* ----------------- SKU ----------------- */
+
+    const sku = `${color.slice(0, 4).toUpperCase()}-${size
+      .slice(0, 4)
+      .toUpperCase()}-${Date.now()}`;
+
+    /* ----------------- TAX ----------------- */
+    const activeTaxes = await Tax.find({ isActive: true });
+
+    // Use price for slab (or mrp if your rule says so)
+    const taxBase = Number(price);
+
+    const tax = getTaxForPrice(taxBase, activeTaxes);
+
+    if (!tax) {
+      return res.status(400).json({
+        message: `No tax slab found for price ${taxBase}`
+      });
+    }
+
+    const gstRate = tax.rate;
+
+    // Inclusive GST
+    let basePrice =
+      (taxBase * 100) / (100 + gstRate);
+
+    basePrice = Number(basePrice.toFixed(2));
+
+    const gstAmount = Number(
+      (taxBase - basePrice).toFixed(2)
+    );
+
+    /* ----------------- PUSH VARIANT ----------------- */
+
+    const newVariant = {
+      color,
+      size,
+      price: Number(price),
+      mrp: Number(mrp),
+      quantity: Number(quantity),
+      sku,
+
+      // ✅ Tax fields
+      gstRate,
+      basePrice,
+      gstAmount,
+
+      isActive: true
+    };
+
+    product.variants.push(newVariant);
+
+    await product.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Variant added successfully",
+      variants: product.variants
+    });
+
+  } catch (err) {
+    console.error("Add Variant Error:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: err.message
+    });
+  }
+};
+
+
+
 const updateVariant = async (req, res) => {
   try {
     const { productId, variantId } = req.params;
@@ -455,9 +602,44 @@ const updateVariant = async (req, res) => {
       return res.status(404).json({ status: "failed", message: "Variant not found" });
     }
 
+
+
+
     if (mrp !== undefined) variant.mrp = mrp;
     if (price !== undefined) variant.price = price;
     if (quantity !== undefined) variant.quantity = quantity;
+
+    const activeTaxes = await Tax.find({ isActive: true });
+    // Decide price for tax slab (price or mrp)
+    const taxBase = price !== undefined ? price : variant.price;
+
+    const tax = getTaxForPrice(taxBase, activeTaxes);
+
+    if (!tax) {
+      return res.status(400).json({
+        status: "failed",
+        message: `No tax slab found for price ${taxBase}`
+      });
+    }
+
+    const gstRate = tax.rate;
+
+    // Inclusive tax calculation
+    let basePrice =
+      (taxBase * 100) / (100 + gstRate);
+
+    basePrice = Number(basePrice.toFixed(2));
+
+    const gstAmount = Number(
+      (taxBase - basePrice).toFixed(2)
+    );
+
+    /* ----------------- Save Tax Fields ----------------- */
+
+    variant.gstRate = gstRate;
+    variant.basePrice = basePrice;
+    variant.gstAmount = gstAmount;
+
 
     await product.save();
     res.status(200).json({ status: "success", message: "Variant updated successfully", variant });
@@ -465,6 +647,31 @@ const updateVariant = async (req, res) => {
     res.status(500).json({ status: "failed", message: "Internal Server Error", error: error.message });
   }
 };
+
+
+// PATCH /admin/products/:pid/variants/:vid/disable
+const disableVariant = async (req, res) => {
+  try {
+    const { pid, vid } = req.params;
+
+    const product = await Product.findById(pid);
+
+    const variant = product.variants.id(vid);
+
+    if (!variant)
+      return res.status(404).json({ message: "Variant not found" });
+
+    variant.isActive = false;
+
+    await product.save();
+
+    res.json({ success: true });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 
 const getColorWiseGallery = async (req, res) => {
   try {
@@ -538,5 +745,28 @@ const updateColorWiseGallery = async (req, res) => {
   }
 };
 
+// controllers/productController.js
 
-module.exports = { addProduct, getAllProducts, getProductDetails, updateProduct, deleteProduct, setNewArrival, getProductVariations, updateVariant, getColorWiseGallery, updateColorWiseGallery };
+const getProductList = async (req, res) => {
+  try {
+    const products = await Product.find()
+      .select("_id title thumbnail")
+      .limit(200) // safety
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      status: "success",
+      data: products,
+    });
+
+  } catch (error) {
+    console.error("Product List Error:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Server error",
+    });
+  }
+};
+
+module.exports = { addProduct, getAllProducts, getProductDetails, updateProduct, deleteProduct, setNewArrival, getProductVariations, addVariant, updateVariant, disableVariant, getColorWiseGallery, updateColorWiseGallery, getProductList };

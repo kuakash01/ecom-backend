@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { getProducts, getProductDetails, getNewArrivals, getBestSeller, getColorGallery } = require('../conrollers/product.controller'); // path to your product controller
+const { getProducts, getProductDetails, getNewArrivals, getBestSeller, getColorGallery, getProductFilters } = require('../conrollers/product.controller'); // path to your product controller
 
 
 
@@ -11,6 +11,7 @@ router.get('/newArrivals', getNewArrivals);
 router.get('/bestSeller', getBestSeller);
 router.get('/:productId', getProductDetails);
 router.get('/:slug/list', getProducts);
+router.get('/:slug/filters', getProductFilters);
 router.get('/:productId/color-gallery/:colorId', getColorGallery);
 
 

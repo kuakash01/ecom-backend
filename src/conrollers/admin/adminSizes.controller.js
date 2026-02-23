@@ -46,28 +46,47 @@ const addSize = async (req, res) => {
 };
 
 // GET ALL SIZES
+// const getAllSizes = async (req, res) => {
+//     try {
+//         const sizes = await Sizes.find();
+
+//         if (!sizes || sizes.length === 0) {
+//             return res.status(404).json({
+//                 status: "failed",
+//                 message: "Sizes not found",
+//             });
+//         }
+
+//         res.status(200).json({
+//             status: "success",
+//             message: "Sizes fetched successfully",
+//             data: sizes,
+//         });
+//     } catch (error) {
+//         res.status(500).json({
+//             status: "failed",
+//             message: "Internal server error",
+//         });
+//     }
+// };
 const getAllSizes = async (req, res) => {
-    try {
-        const sizes = await Sizes.find();
+  try {
+    const sizes = await Sizes.find().sort({ createdAt: -1 });
 
-        if (!sizes || sizes.length === 0) {
-            return res.status(404).json({
-                status: "failed",
-                message: "Sizes not found",
-            });
-        }
+    res.status(200).json({
+      status: "success",
+      message: "Sizes fetched successfully",
+      data: sizes || []
+    });
 
-        res.status(200).json({
-            status: "success",
-            message: "Sizes fetched successfully",
-            data: sizes,
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: "failed",
-            message: "Internal server error",
-        });
-    }
+  } catch (error) {
+    console.error("Get Sizes Error:", error);
+
+    res.status(500).json({
+      status: "failed",
+      message: "Internal server error"
+    });
+  }
 };
 
 // EDIT SIZE
