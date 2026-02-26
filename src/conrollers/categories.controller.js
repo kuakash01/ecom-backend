@@ -4,9 +4,9 @@ const Categories = require("../models/categories.model");
 const getCategories = async (req, res) => {
   try {
     const categories = await Categories.find();
-    res.status(200).json({ status: "success", data: categories });
+    res.status(200).json({ status: "success", message: "Categories fetched successfully", data: categories });
   } catch (error) {
-    res.status(500).json({ status: "failed", error: error.message });
+    res.status(500).json({ status: "failed", message: "Internal server error", error: error.message });
   }
 };
 const getCategoriesTree = async (req, res) => {

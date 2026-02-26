@@ -36,7 +36,7 @@ const getProducts = async (req, res) => {
       color,
       size,
       style,
-      search
+      search,
     } = req.query;
 
     // -----------------------------
