@@ -36,173 +36,11 @@ const uploadToCloudinary = (buffer, folder) => {
   });
 };
 
-// src/controllers/product.controller.js
-// const addProduct = async (req, res) => {
-//   try {
-//     const { name, price, mrp, size, category, quantity, sku, searchTags, filterTags, description } = req.body;
 
-//     if (!req.files || !req.files.thumbnail) {
-//       return res.status(400).json({ message: "Thumbnail is required" });
-//     }
-
-//     // 1. Upload Thumbnail (single file)
-//     const thumbnailFile = req.files.thumbnail[0];
-//     const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
-
-//     // 2. Upload Gallery (multiple files)
-//     let gallery = [];
-//     if (req.files.gallery && req.files.gallery.length > 0) {
-//       gallery = await Promise.all(
-//         req.files.gallery.map(async (file) => {
-//           const result = await uploadToCloudinary(file.buffer, "products/gallery");
-//           return {
-//             url: result.secure_url,
-//             public_id: result.public_id,
-//           };
-//         })
-//       );
-//     }
-
-//     // 3. Save product
-//     const newProduct = await Product.create({
-//       name,
-//       price,
-//       mrp,
-//       description,
-//       thumbnail: {
-//         url: thumbnailResult.secure_url,
-//         public_id: thumbnailResult.public_id,
-//       },
-//       gallery,
-//       category,
-//       quantity,
-//       size,
-//       sku,
-//       searchTags: searchTags ? searchTags.split(',').map(tag => tag.trim()) : [],
-//       filterTags: filterTags ? filterTags.split(',').map(tag => tag.trim()) : [],
-//     });
-
-//     res.status(201).json({
-//       message: "Product created successfully",
-//       data: newProduct,
-//     });
-//   } catch (err) {
-//     console.error("Error in addProduct:", err);
-//     res.status(500).json({ message: "Upload failed", error: err.message });
-//   }
-// };
-
-
-// const addProduct = async (req, res) => {
-//   try {
-//     const {
-//       title,
-//       description,
-//       category,
-//       searchTags,
-//       filterTags,
-//       variations, // JSON string from frontend
-//     } = req.body;
-
-//     // ---------------- 1️⃣ Thumbnail ----------------
-//     const thumbnailFile = req.files.find(f => f.fieldname === "thumbnail");
-//     if (!thumbnailFile) {
-//       return res.status(400).json({ message: "Thumbnail is required" });
-//     }
-
-//     const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
-//     const thumbnail = {
-//       url: thumbnailResult.secure_url,
-//       public_id: thumbnailResult.public_id,
-//     };
-
-//     // ---------------- 2️⃣ Variants ----------------
-//     // Frontend sends:
-//     // variations = JSON.stringify([
-//     //   { color, size, price, mrp, quantity, sku },
-//     //   ...
-//     // ])
-//     const parsedVariations = JSON.parse(variations);
-
-//     // Map color galleries from req.files
-//     const variantGalleriesMap = {};
-//     if (req.files) {
-//       req.files.forEach(file => {
-//         const match = file.fieldname.match(/^colorGalleries_(.+)\[\]$/);
-//         if (match) {
-//           const colorId = match[1];
-//           if (!variantGalleriesMap[colorId]) variantGalleriesMap[colorId] = [];
-//           variantGalleriesMap[colorId].push(file);
-//         }
-//       });
-//     }
-
-//     // Upload variant galleries to Cloudinary
-//     const variants = [];
-//     for (const v of parsedVariations) {
-//       const galleryFiles = variantGalleriesMap[v.color] || [];
-//       const gallery = await Promise.all(
-//         galleryFiles.map(async file => {
-//           const uploaded = await uploadToCloudinary(file.buffer, "products/variants");
-//           return {
-//             url: uploaded.secure_url,
-//             public_id: uploaded.public_id,
-//           };
-//         })
-//       );
-
-//       variants.push({
-//         color: v.color,
-//         size: v.size,
-//         price: v.price,
-//         mrp: v.mrp,
-//         quantity: v.quantity,
-//         sku: v.sku,
-//         gallery,
-//       });
-//     }
-
-//     // ---------------- 3️⃣ Save Product ----------------
-//     const newProduct = await Product.create({
-//       title,
-//       description,
-//       category,
-//       thumbnail,
-//       variants,
-//       searchTags: searchTags ? searchTags.split(",").map(t => t.trim()) : [],
-//       filterTags: filterTags ? filterTags.split(",").map(t => t.trim()) : [],
-//     });
-
-//     res.status(201).json({
-//       message: "Product created successfully",
-//       data: newProduct,
-//     });
-//   } catch (err) {
-//     console.error("Error in addProduct:", err);
-//     res.status(500).json({ message: "Upload failed", error: err.message });
-//   }
-// };
-
+// Add Product common details for variations - Admin
 const addProduct = async (req, res) => {
   try {
     const { title, description, category, searchTags, filterTags, variations } = req.body;
-
-    // ---------------- 1️⃣ Thumbnail ----------------
-    if (!req.file) {
-      return res.status(400).json({ message: "Thumbnail is required" });
-    }
-
-    let thumbnail;
-    try {
-      const thumbnailResult = await uploadToCloudinary(req.file.buffer, "products/thumbnails");
-      thumbnail = {
-        url: thumbnailResult.secure_url,
-        public_id: thumbnailResult.public_id,
-      };
-    } catch (err) {
-      console.error("Thumbnail upload failed:", err);
-      return res.status(500).json({ message: "Thumbnail upload failed" });
-    }
 
     // ---------------- 2️⃣ Variants ----------------
     if (!variations) {
@@ -211,57 +49,58 @@ const addProduct = async (req, res) => {
 
 
 
-    const parsedVariations = JSON.parse(variations);
+    // const parsedVariations = JSON.parse(variations);
 
     const activeTaxes = await Tax.find({ isActive: true });
 
 
     // Create variants array without gallery
     let count = 1;
-    const variants = parsedVariations.map(v => {
-      const colorCode = v.color.slice(0, 4).toUpperCase();
-      const sizeCode = v.size.slice(0, 4).toUpperCase();
-      const sku = `${colorCode}-${sizeCode}-${count}`;
-      count++;
+    const variants = [];
+    if (variations.length) {
+       variants = variations.map(v => {
+        const colorCode = v.color.slice(0, 4).toUpperCase();
+        const sizeCode = v.size.slice(0, 4).toUpperCase();
+        const sku = `${colorCode}-${sizeCode}-${count}`;
+        count++;
 
 
-      // 🔍 Find tax slab based on MRP (or price)
-      const tax = getTaxForPrice(v.price, activeTaxes);
+        // 🔍 Find tax slab based on MRP (or price)
+        const tax = getTaxForPrice(v.price, activeTaxes);
 
-      let gstRate = 0;
-      let basePrice = v.price;
-      let gstAmount = 0;
+        let gstRate = 0;
+        let basePrice = v.price;
+        let gstAmount = 0;
 
-      if (tax) {
-        gstRate = tax.rate;
+        if (tax) {
+          gstRate = tax.rate;
 
-        basePrice = (v.price * 100) / (100 + gstRate);
-        basePrice = Number(basePrice.toFixed(2));
+          basePrice = (v.price * 100) / (100 + gstRate);
+          basePrice = Number(basePrice.toFixed(2));
 
-        gstAmount = Number((v.price - basePrice).toFixed(2));
-      }
+          gstAmount = Number((v.price - basePrice).toFixed(2));
+        }
 
 
-      return {
-        color: v.color,
-        size: v.size,
-        price: v.price,
-        mrp: v.mrp,
-        quantity: v.quantity,
-        sku,
-        gstRate,
-        basePrice,
-        gstAmount
-      };
-    });
-
+        return {
+          color: v.color,
+          size: v.size,
+          price: v.price,
+          mrp: v.mrp,
+          quantity: v.quantity,
+          sku,
+          gstRate,
+          basePrice,
+          gstAmount
+        };
+      });
+    }
     // ---------------- 3️⃣ Save Product ----------------
     const newProduct = await Product.create({
       title,
       description: description ? description : "",
       category,
-      thumbnail,
-      variants,
+      variants: variants.length ? variants : [],
       searchTags: searchTags ? searchTags.split(",").map(t => t.trim()) : [],
       filterTags: filterTags ? filterTags.split(",").map(t => t.trim()) : [],
     });
@@ -310,76 +149,17 @@ const getProductDetails = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, price, mrp, size, category, quantity, sku, searchTags, filterTags, description, existingGallery } = req.body;
+    const { title, description, category, searchTags, filterTags, } = req.body;
 
     const product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // 1. Update Thumbnail (if new thumbnail is uploaded)
-    if (req.files && req.files.thumbnail) {
-      // Delete old thumbnail from Cloudinary (disabled intentionally)
-      // if (product.thumbnail && product.thumbnail.public_id) {
-      //   await cloudinary.uploader.destroy(product.thumbnail.public_id);
-      // }
-
-      const thumbnailFile = req.files.thumbnail[0];
-      const thumbnailResult = await uploadToCloudinary(thumbnailFile.buffer, "products/thumbnails");
-
-      product.thumbnail = {
-        url: thumbnailResult.secure_url,
-        public_id: thumbnailResult.public_id,
-      };
-    }
-
-    // 2. Update Gallery
-    // Keep only existing URLs that are still sent in the request (req.body.existingGallery)
-    let updatedGallery = [];
-
-    if (existingGallery) {
-      // Parse existingGallery (it can come as string or array)
-      const existing = Array.isArray(existingGallery)
-        ? existingGallery
-        : [existingGallery];
-      updatedGallery = product.gallery.filter(img => existing.includes(img.url));
-    }
-
-    // If new gallery images are uploaded, append them
-    if (req.files && req.files.gallery && req.files.gallery.length > 0) {
-      // Delete old gallery images (disabled intentionally)
-      // if (product.gallery && product.gallery.length > 0) {
-      //   await Promise.all(
-      //     product.gallery.map((img) => cloudinary.uploader.destroy(img.public_id))
-      //   );
-      // }
-
-      const newGallery = await Promise.all(
-        req.files.gallery.map(async (file) => {
-          const result = await uploadToCloudinary(file.buffer, "products/gallery");
-          return {
-            url: result.secure_url,
-            public_id: result.public_id,
-          };
-        })
-      );
-
-      // Append new images to the filtered old ones
-      updatedGallery = [...updatedGallery, ...newGallery];
-    }
-
-    // Replace gallery with final updated list
-    product.gallery = updatedGallery;
-
     // 3. Update other fields
-    product.name = name ?? product.name;
-    product.price = price ?? product.price;
-    product.mrp = mrp ?? product.mrp;
+    product.title = title ?? product.title;
     product.description = description ?? product.description;
     product.category = category ?? product.category;
-    product.quantity = quantity ?? product.quantity;
-    product.size = size ?? product.size;
-    product.sku = sku ?? product.sku;
     product.searchTags = searchTags ? searchTags.split(",").map(tag => tag.trim()) : product.searchTags;
     product.filterTags = filterTags ? filterTags.split(",").map(tag => tag.trim()) : product.filterTags;
 
@@ -408,7 +188,7 @@ const deleteProduct = async (req, res) => {
       return res.status(404).json({ status: "failed", message: "Product not found", error: "Product not found" });
 
 
-    // Optional: Delete image from Cloudinary
+    // Delete image from Cloudinary
     if (product.image && product.image.public_id) {
       await cloudinary.uploader.destroy(product.image.public_id);
     }

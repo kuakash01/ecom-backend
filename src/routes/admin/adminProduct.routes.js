@@ -8,14 +8,14 @@ const roleCheck = require("../../middlewares/roleCheck");
 
 
 // Matches the key in your FormData → formData.append("productImage", file)
-router.post('/', verifyToken, roleCheck("admin"), upload.single('thumbnail'), addProduct);
+router.post('/', verifyToken, roleCheck("admin"), addProduct);
 router.get('/', getAllProducts);
 
 //for carousel 
 router.get("/list", getProductList);
 
 router.get('/:id', getProductDetails);
-router.patch('/:id', verifyToken, roleCheck("admin"), upload.fields([{ name: 'thumbnail', maxCount: 1 }, { name: 'gallery', maxCount: 5 }]), updateProduct);
+router.patch('/:id', verifyToken, roleCheck("admin"), updateProduct);
 router.patch('/:productId/newArrival', verifyToken, roleCheck("admin"), setNewArrival);
 router.delete("/:id", verifyToken, roleCheck("admin"), deleteProduct);
 

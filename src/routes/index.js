@@ -23,6 +23,7 @@ router.use('/admin/orders', require("./admin/adminOrders.routes"));
 router.use('/admin/carousel', require("./admin/adminCarousel.routes"));
 router.use('/admin/colors', require("./admin/adminColors.routes"));
 router.use('/admin/sizes', require("./admin/adminSizes.routes"));
+router.use('/announcement', require('./admin/adminAnnouncement.routes'));
 
 
 

@@ -3,10 +3,12 @@ const router = express.Router();
 
 const verifyToken = require('../middlewares/verifyToken'); // Middleware to verify token
 
-const { createOrder, getUserOrders, getOrderById } = require('../conrollers/order.controller');
+const { createOrder, getUserOrders, getOrderById, verifyPayment } = require('../conrollers/order.controller');
 
 // Create a new order
 router.post('/', verifyToken, createOrder);
+
+router.post('/verify-payment', verifyToken, verifyPayment);
 
 // Get all orders for a user
 router.get('/', verifyToken, getUserOrders);

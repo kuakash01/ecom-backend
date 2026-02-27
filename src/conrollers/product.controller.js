@@ -375,8 +375,12 @@ const getProducts = async (req, res) => {
 
           category: "$category.name",
 
-          allColors: 1
+          allColors: 1,
+          createdAt: 1
         }
+      },
+      {
+        $sort: { createdAt: -1 }
       }
 
     ]);

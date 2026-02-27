@@ -49,7 +49,7 @@ const orderSchema = new mongoose.Schema({
 
     status: {
         type: String,
-        enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+        enum: ['pending','confirmed','processing','shipped','delivered','cancelled','returned'],
         default: 'pending'
     },
     address: {
@@ -70,11 +70,15 @@ const orderSchema = new mongoose.Schema({
     },
 
     priceSummary: {
+        mrpSubTotal: {
+            type: Number,
+            required: true, // inclusive
+        },
         subTotal: {
             type: Number,
             required: true, // inclusive
         },
-        basePrice: {
+        basePriceSubTotal: {
             type: Number,
             required: true, // exclusive of GST
         },
@@ -103,7 +107,7 @@ const orderSchema = new mongoose.Schema({
     paymentDetails: {
         method: {
             type: String,
-            enum: ['credit_card', 'debit_card', 'net_banking', 'cod', 'upi'],
+            enum: ['online', 'cod',],
             required: true
         },
         transactionId: {
@@ -116,8 +120,7 @@ const orderSchema = new mongoose.Schema({
         },
         status: {
             type: String,
-            enum: ['pending', 'completed', 'failed'],
-            default: 'pending'
+            enum: ['pending', 'paid', 'failed', 'refunded'],
         },
         paidAt: {
             type: Date,

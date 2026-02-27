@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const Product = require('../models/product.model');
 const mongoose = require("mongoose");
 const pricing = require('../utils/pricing');
+const razorpay = require('../utils/razorpay');
 
 
 const generateOrderId = () => {
@@ -20,13 +21,13 @@ const createOrder = async (req, res) => {
         const userId = req.user.id;
         let orderItems = [];
         let priceSummary = {
-            basePrice:0,
-            subtotal: 0,
+            basePriceSubTotal: 0,
+            mrpSubTotal: 0,
+            subTotal: 0,
             taxAmount: 0,
             deliveryCharge: 0,
             discount: 0,
             total: 0,
-            finalTotal: 0,
         };
 
         // Cart order
@@ -267,13 +268,14 @@ const createOrder = async (req, res) => {
                     subTotal: item.product.variant.price * item.quantity,
                 }
                 orderItems.push(cartItem);
-                priceSummary.basePrice += cartItem.basePrice * cartItem.quantity;
+                priceSummary.basePriceSubTotal += cartItem.basePrice * cartItem.quantity;
+                priceSummary.mrpSubTotal += cartItem.mrp * cartItem.quantity;
+                priceSummary.subTotal += cartItem.subTotal;
                 priceSummary.taxAmount += cartItem.gstAmount * cartItem.quantity;
-                priceSummary.subtotal += cartItem.subTotal;
                 priceSummary.discount += (cartItem.mrp - cartItem.price) * cartItem.quantity;
             });
 
-            priceSummary.total = orderItems.reduce((sum, item) => sum + item.subTotal, 0);
+            // priceSummary.total = orderItems.reduce((sum, item) => sum + item.subTotal, 0);
             // return res.status(200).json({ status: "success", message: "Cart order preview fetched successfully", data: { orderItems, totalAmount } });
 
         } else if (type === "BUY_NOW") {
@@ -401,18 +403,19 @@ const createOrder = async (req, res) => {
                 quantity: buyNowQty,
                 subTotal: product.variant.price * buyNowQty
             });
-            priceSummary.subtotal += product.variant.price * buyNowQty;
-            priceSummary.basePrice += product.variant.basePrice * buyNowQty;
+            priceSummary.mrpSubTotal += product.variant.mrp * buyNowQty;
+            priceSummary.subTotal += product.variant.price * buyNowQty;
+            priceSummary.basePriceSubTotal += product.variant.basePrice * buyNowQty;
             priceSummary.taxAmount += product.variant.gstAmount * buyNowQty;
             priceSummary.discount += (product.variant.mrp - product.variant.price) * buyNowQty;
 
-            priceSummary.total = orderItems.reduce((sum, item) => sum + item.subTotal, 0);
+            // priceSummary.total = orderItems.reduce((sum, item) => sum + item.subTotal, 0);
         } else {
             return res.status(400).json({ status: "failed", message: "Invalid order type" });
         }
 
-        priceSummary.deliveryCharge = await pricing.calculateDeliveryCharge(priceSummary.subtotal);
-        priceSummary.finalTotal = priceSummary.total + priceSummary.deliveryCharge;
+        priceSummary.deliveryCharge = await pricing.calculateDeliveryCharge(priceSummary.subTotal);
+        priceSummary.total = priceSummary.subTotal + priceSummary.deliveryCharge;
 
 
         // Snapshot address
@@ -427,10 +430,38 @@ const createOrder = async (req, res) => {
         const orderId = generateOrderId()
         let txId = null;
 
-        if (paymentMethod !== "cod") {
-            txId = crypto.randomUUID();
-        }
+        if (paymentMethod === "online") {
+            const options = {
+                amount: priceSummary.total * 100, // amount in paise
+                currency: "INR",
+                receipt: orderId,
+                payment_capture: 1
+            };
+            const razorpayOrder = await razorpay.orders.create(options);
 
+            const order = await Order.create({
+                user: userId,
+                items: orderItems,
+                orderId,
+                address: formatAddress(address),
+                status: "pending",
+                priceSummary,
+                paymentDetails: {
+                    method: "online",
+                    transactionId: razorpayOrder.id,
+                    payableAmount: priceSummary.total,
+                    status: "pending"
+                }
+            });
+
+            return res.status(201).json({
+                status: "success",
+                message: "Verify payment to complete order",
+                razorpayOrderId: razorpayOrder.id,
+                key: process.env.RAZORPAY_KEY_ID,
+                orderDocId: order._id
+            });
+        }
 
 
         // Create order
@@ -439,19 +470,12 @@ const createOrder = async (req, res) => {
             items: orderItems,
             orderId,
             address: formatAddress(address),
-            status: "pending",
-            priceSummary:{
-                subTotal: priceSummary.subtotal,
-                basePrice: priceSummary.basePrice,
-                taxAmount: priceSummary.taxAmount,
-                discount: priceSummary.discount,
-                deliveryCharge: priceSummary.deliveryCharge,
-                total: priceSummary.finalTotal
-            },
+            status: "confirmed",
+            priceSummary,
             paymentDetails: {
-                method: paymentMethod,
+                method: "cod",
                 transactionId: txId,
-                payableAmount: priceSummary.finalTotal,
+                payableAmount: priceSummary.total,
                 status: "pending"
             }
         });
@@ -467,7 +491,7 @@ const createOrder = async (req, res) => {
             status: "success",
             message: "Order created successfully",
             order: {
-                orderId,
+                orderDocId: order._id,
                 paymentDetails: order.paymentDetails,
             }
         });
@@ -476,6 +500,47 @@ const createOrder = async (req, res) => {
         res.status(500).json({ status: "failed", message: "Internal server error" });
     }
 };
+
+
+const verifyPayment = async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+        const sign = razorpay_order_id + "|" + razorpay_payment_id;
+
+        const expectedSign = crypto
+            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+            .update(sign)
+            .digest("hex");
+
+
+        const order = await Order.findOne({
+            "paymentDetails.transactionId": razorpay_order_id
+        });
+
+        if (!order) return res.status(404).json({ status: "failed" });
+
+        if (expectedSign !== razorpay_signature) {
+            order.paymentDetails.status = "failed";
+            await order.save();
+            return res.status(400).json({ status: "failed" });
+        }
+        order.status = "confirmed";
+        order.paymentDetails.status = "paid";
+        order.paymentDetails.paymentId = razorpay_payment_id;
+
+        await order.save();
+
+        await CartItem.deleteMany({ user: order.user });
+        await Cart.updateOne({ user: order.user }, { $set: { items: [] } });
+
+        res.json({ status: "success" });
+    } catch (err) {
+        console.error("Payment verification error:", err);
+        res.status(500).json({ status: "failed" });
+    }
+};
+
 
 const getUserOrders = async (req, res) => {
     try {
@@ -543,5 +608,6 @@ module.exports = {
     createOrder,
     getUserOrders,
     getOrderById,
+    verifyPayment
 };
 
