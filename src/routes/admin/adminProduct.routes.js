@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const upload = require('../../config/multer');
-const { addProduct, getAllProducts, getProductDetails, getProductVariations, updateProduct, deleteProduct, setNewArrival, addVariant, updateVariant, disableVariant, getColorWiseGallery, updateColorWiseGallery, getProductList } = require('../../conrollers/admin/adminProduct.controller'); // path to your product controller
+const { addProduct, getAllProducts, getProductDetails, getProductVariations, updateProduct, deleteProduct, setNewArrival, addVariant, updateVariant, deleteVariant, getColorWiseGallery, updateColorWiseGallery, getProductList } = require('../../conrollers/admin/adminProduct.controller'); // path to your product controller
 const verifyToken = require('../../middlewares/verifyToken'); // Middleware to verify token
 const roleCheck = require("../../middlewares/roleCheck");
 
@@ -23,9 +23,9 @@ router.delete("/:id", verifyToken, roleCheck("admin"), deleteProduct);
 router.post('/:productId/variants', addVariant);
 router.get('/:productId/variants', getProductVariations);
 router.patch('/:productId/variants/:variantId', updateVariant)
-router.patch('/:productId/variants/:variantId/disable', disableVariant)
+router.delete('/:productId/variants/:variantId', deleteVariant)
 router.get('/:productId/color-gallery', getColorWiseGallery);
-router.patch('/:productId/color-gallery/:colorId', upload.fields([{ name: 'newImages', maxCount: 5 }]), updateColorWiseGallery)
+router.patch('/:productId/color-gallery/:colorId', upload.fields([{ name: 'newImages', maxCount: 10 }]), updateColorWiseGallery)
 
 
 

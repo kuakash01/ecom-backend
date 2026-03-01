@@ -24,7 +24,9 @@ const addCategory = async (req, res) => {
 
     // res.status(200).json({status:"success", message:"ok", data: {...req.body, image}})
     try {
-        const imageResult = await uploadToCloudinary(image.buffer, "categories");
+        const imageResult = null;
+        if (image)
+            imageResult = await uploadToCloudinary(image.buffer, "categories");
 
         const parentId = parent || null;
         const categoryExists = await Categories.findOne({ name: name.trim(), parent: parentId });
@@ -36,10 +38,10 @@ const addCategory = async (req, res) => {
             description,
             parent: parent ? parent : null,
             slug,
-            image: {
+            image: imageResult ? {
                 url: imageResult.url,
                 public_id: imageResult.public_id
-            }
+            } : null
         });
         await newCategory.save();
         res.status(201).json({ status: "success", message: "Category added successfully", data: newCategory });

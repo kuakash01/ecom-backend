@@ -429,28 +429,59 @@ const updateVariant = async (req, res) => {
 };
 
 
-// PATCH /admin/products/:pid/variants/:vid/disable
-const disableVariant = async (req, res) => {
+// delete variant also delete gallery if no other variant with same color exists
+const deleteVariant = async (req, res) => {
   try {
-    const { pid, vid } = req.params;
+    const { productId, variantId } = req.params;
 
-    const product = await Product.findById(pid);
+    const product = await Product.findById(productId);
+    if (!product)
+      return res.status(404).json({ message: "Product not found" });
 
-    const variant = product.variants.id(vid);
-
+    const variant = product.variants.id(variantId);
     if (!variant)
       return res.status(404).json({ message: "Variant not found" });
 
-    variant.isActive = false;
+    const variantColor = variant.color?.toString();
+
+    // 🔥 1️⃣ Remove the variant
+    product.variants.pull(variantId);
+
+    // 🔥 2️⃣ Check if same color still exists
+    const sameColorVariantExists = product.variants.some(
+      (v) => v.color?.toString() === variantColor
+    );
+
+    // 🔥 3️⃣ If no variant with this color → delete gallery + images
+    if (!sameColorVariantExists) {
+      const galleryIndex = product.colorGalleries.findIndex(
+        (g) => g.color?.toString() === variantColor
+      );
+
+      if (galleryIndex !== -1) {
+        const gallery = product.colorGalleries[galleryIndex];
+
+        if (gallery.gallery?.length > 0) {
+          // Batch delete from Cloudinary
+          await cloudinary.api.delete_resources(
+            gallery.gallery.map((img) => img.public_id)
+          );
+        }
+
+        // Remove gallery from DB
+        product.colorGalleries.splice(galleryIndex, 1);
+      }
+    }
 
     await product.save();
 
-    res.json({ success: true });
+    res.json({ success: true, message: "Variant deleted successfully" });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 
 const getColorWiseGallery = async (req, res) => {
@@ -517,6 +548,7 @@ const updateColorWiseGallery = async (req, res) => {
       colorGallery,
     });
   } catch (error) {
+    console.log("Update Color Gallery Error:", error);
     return res.status(500).json({
       status: "failed",
       message: "Internal Server Error",
@@ -549,4 +581,4 @@ const getProductList = async (req, res) => {
   }
 };
 
-module.exports = { addProduct, getAllProducts, getProductDetails, updateProduct, deleteProduct, setNewArrival, getProductVariations, addVariant, updateVariant, disableVariant, getColorWiseGallery, updateColorWiseGallery, getProductList };
+module.exports = { addProduct, getAllProducts, getProductDetails, updateProduct, deleteProduct, setNewArrival, getProductVariations, addVariant, updateVariant, deleteVariant, getColorWiseGallery, updateColorWiseGallery, getProductList };

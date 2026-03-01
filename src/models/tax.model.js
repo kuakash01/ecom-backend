@@ -27,15 +27,7 @@ const taxSchema = new mongoose.Schema({
         default: true
     },
 
-    effectiveFrom: {
-        type: Date,
-        required: true
-    },
 
-    effectiveTo: {
-        type: Date,
-        default: null
-    }
 
 }, { timestamps: true });
 
